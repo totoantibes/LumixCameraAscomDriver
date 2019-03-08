@@ -1,20 +1,19 @@
-
-
-
 Imports System.IO
 Imports System.Net
 Imports System.Net.NetworkInformation
-Imports NATUPNPLib
-Imports UPNPLib
 
 
 <ComVisible(False)>
 Public Class SetupDialogForm
 
     Private Sub OK_Button_Click(ByVal sender As System.Object, ByVal e As System.EventArgs) Handles OK_Button.Click ' OK button event handler
-        ' Persist new values of user settings to the ASCOM profile
-        Camera.IPAddress = CBCameraIPAddress.SelectedItem.ToString ' Update the state variables with results from the dialogue
-        Camera.traceState = chkTrace.Checked
+        If Camera.IPAddress IsNot Camera.IPAddressDefault Then
+            Camera.SendLumixMessage(Camera.ISO + "800")
+            Camera.SendLumixMessage(Camera.SHUTTERSPEED + Camera.ShutterTable(55, 0))
+            Camera.SendLumixMessage(Camera.QUALITY + "raw_fine")
+        End If
+        TBDCRawPath.Text = System.IO.Path.GetFullPath(OpenFileDialog1.FileName)
+        TBTempPath.Text = FolderBrowserDialog1.SelectedPath + "\"
         Me.DialogResult = System.Windows.Forms.DialogResult.OK
         Me.Close()
     End Sub
@@ -34,6 +33,19 @@ Public Class SetupDialogForm
     ''' Error codes GetIpNetTable returns that we recognise
     ''' </summary>
     Const ERROR_INSUFFICIENT_BUFFER As Integer = 122
+
+    Public Sub New()
+
+        ' This call is required by the designer.
+        InitializeComponent()
+
+        ' Add any initialization after the InitializeComponent() call.
+        CBISO.DataSource = New BindingSource(Camera.ISOTable, Nothing)
+        For i = 0 To 55
+            CBShutterSpeed.Items.Add(Camera.ShutterTable(i, 1))
+        Next
+    End Sub
+
     ''' <summary>
     ''' MIB_IPNETROW structure returned by GetIpNetTable
     ''' DO NOT MODIFY THIS STRUCTURE.
@@ -79,8 +91,6 @@ Public Class SetupDialogForm
     ''' <returns></returns>
     Public Shared Function GetAllDevicesOnLAN() As Dictionary(Of IPAddress, PhysicalAddress)
         Dim all As New Dictionary(Of IPAddress, PhysicalAddress)()
-        ' Add this PC to the list...
-        'all.Add(GetIPAddress(), GetMacAddress())
         Dim spaceForNetTable As Integer = 0
         ' Get the space needed
         ' We do that by requesting the table, but not giving any space at all.
@@ -151,23 +161,6 @@ Public Class SetupDialogForm
 
     End Sub
 
-    Public Function FindMediaService() As Boolean
-        Dim MediaServer As UPNPLib.UPnPDevice
-        Dim ActionArgs As New Object ' must be instantiated
-        Dim deviceFinder = CreateObject("UPnP.UPnPDeviceFinder")
-        Dim devices = deviceFinder.FindByType("urn:schemas-upnp-org:service:ContentDirectory:1", 0)
-
-        Dim FoundService As Boolean = False
-        For Each MediaServer In devices
-            If MediaServer.ModelName = "Lumix" Then
-                Camera.LumixService = MediaServer
-                FoundService = True
-                Return FoundService
-            End If
-        Next
-        Return FoundService
-    End Function
-
 
     Private Sub InitUI()
         Dim request As WebRequest
@@ -176,8 +169,6 @@ Public Class SetupDialogForm
         Dim statusCode As HttpStatusCode
         Dim ResponseText As String
 
-
-        chkTrace.Checked = Camera.traceState
 
         Dim IPValues As New List(Of IPAddress)(GetAllDevicesOnLAN().Keys)
         CBCameraIPAddress.Items.Clear()
@@ -189,9 +180,8 @@ Public Class SetupDialogForm
         'trying to connect to the Lumix Cam
 
         For Each TryIPValue As IPAddress In IPValues
-            'request = WebRequest.Create("http://" + TryIPValue.ToString + "/cam.cgi?mode=accctrl&type=req_acc&value=4D454930-0100-1000-8001-024500021C98&value2=SM-G903F HTTP/1.1")
             request = WebRequest.Create("http://" + TryIPValue.ToString + "/" + Camera.STATE)
-            'Camera.SendLumixMessage(Camera.ISO + CBISO.SelectedItem.ToString)
+            request.Timeout = 2000
             Try
                 Dim myWebResponse = CType(request.GetResponse(), HttpWebResponse)
                 myStreamReader = New StreamReader(myWebResponse.GetResponseStream())
@@ -216,7 +206,7 @@ Public Class SetupDialogForm
                                 ResponseText = myStreamReader.ReadToEnd & "Status Description = " & httpResponse.StatusDescription ' HttpWebResponse.StatusDescription
                             End Using
                         Catch ex As Exception
-                            'TL.LogMessage("Message Sent Failed", "Message Sent  failed")
+
                         End Try
                     End Using
                 End If
@@ -229,23 +219,32 @@ Public Class SetupDialogForm
         Camera.IPAddress = CBCameraIPAddress.SelectedItem.ToString
     End Sub
 
-    Private Sub ButtonApplySettings_Click(sender As Object, e As EventArgs) Handles ButtonApplySettings.Click
-        If Camera.IPAddress IsNot Camera.IPAddressDefault Then
-            If CBISO.SelectedItem Then
-                Camera.SendLumixMessage(Camera.ISO + CBISO.SelectedItem.ToString)
-            Else
-                Camera.SendLumixMessage(Camera.ISO + "800")
-            End If
-            If CBSpeed.SelectedIndex Then
-                Camera.SendLumixMessage(Camera.SHUTTERSPEED + Camera.ShutterTable(CBSpeed.SelectedIndex - 1, 0))
-            Else
-                Camera.SendLumixMessage(Camera.SHUTTERSPEED + Camera.ShutterTable(55, 0))
-            End If
-            ' switching to play mode
-            Camera.SendLumixMessage("/cam.cgi?mode=camcmd&value=playmode")
-            FindMediaService()
-            End If
+    Private Sub CameraIPAddress_ValueMemberChanged(sender As Object, e As EventArgs) Handles CBCameraIPAddress.ValueMemberChanged
+        Camera.IPAddress = CBCameraIPAddress.SelectedItem.ToString
+    End Sub
 
+
+
+
+    Private Sub Button2_Click(sender As Object, e As EventArgs) Handles ButtonRaw.Click
+        If OpenFileDialog1.ShowDialog = DialogResult.OK Then
+            TBDCRawPath.Text = System.IO.Path.GetFullPath(OpenFileDialog1.FileName)
+
+        End If
+    End Sub
+
+    Private Sub ButtonTemp_Click(sender As Object, e As EventArgs) Handles ButtonTemp.Click
+        If FolderBrowserDialog1.ShowDialog = DialogResult.OK Then
+            TBTempPath.Text = FolderBrowserDialog1.SelectedPath + "\"
+        End If
+    End Sub
+
+    Private Sub ButtonConnect_Click(sender As Object, e As EventArgs) Handles ButtonConnect.Click
+        If Camera.IPAddress IsNot Camera.IPAddressDefault Then
+            Camera.SendLumixMessage(Camera.ISO + "800")
+            Camera.SendLumixMessage(Camera.SHUTTERSPEED + Camera.ShutterTable(55, 0))
+            Camera.SendLumixMessage(Camera.QUALITY + "raw_fine")
+        End If
     End Sub
 
 

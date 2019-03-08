@@ -27,6 +27,7 @@ Partial Class Form1
         Me.buttonChoose = New System.Windows.Forms.Button()
         Me.ButtonStartExpo = New System.Windows.Forms.Button()
         Me.ButtonStopExpo = New System.Windows.Forms.Button()
+        Me.GetImageArray = New System.Windows.Forms.Button()
         Me.SuspendLayout()
         '
         'labelDriverId
@@ -79,11 +80,21 @@ Partial Class Form1
         Me.ButtonStopExpo.Text = "Stop Exposure"
         Me.ButtonStopExpo.UseVisualStyleBackColor = True
         '
+        'GetImageArray
+        '
+        Me.GetImageArray.Location = New System.Drawing.Point(392, 175)
+        Me.GetImageArray.Name = "GetImageArray"
+        Me.GetImageArray.Size = New System.Drawing.Size(121, 32)
+        Me.GetImageArray.TabIndex = 7
+        Me.GetImageArray.Text = "GetImageArray"
+        Me.GetImageArray.UseVisualStyleBackColor = True
+        '
         'Form1
         '
         Me.AutoScaleDimensions = New System.Drawing.SizeF(8.0!, 16.0!)
         Me.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font
         Me.ClientSize = New System.Drawing.Size(533, 229)
+        Me.Controls.Add(Me.GetImageArray)
         Me.Controls.Add(Me.ButtonStopExpo)
         Me.Controls.Add(Me.ButtonStartExpo)
         Me.Controls.Add(Me.labelDriverId)
@@ -100,4 +111,5 @@ Partial Class Form1
     Private WithEvents buttonChoose As System.Windows.Forms.Button
     Friend WithEvents ButtonStartExpo As Button
     Friend WithEvents ButtonStopExpo As Button
+    Friend WithEvents GetImageArray As Button
 End Class

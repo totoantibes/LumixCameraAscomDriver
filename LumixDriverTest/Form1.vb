@@ -67,7 +67,23 @@
     End Sub
 
     Private Sub ButtonStartExpo_Click(sender As Object, e As EventArgs) Handles ButtonStartExpo.Click
-        Me.driver.StartExposure(10, True)
+        If IsConnected Then
+
+            Me.driver.StartExposure(10, True)
+
+        Else
+            MessageBox.Show("camera not connected")
+
+        End If
+
+
+    End Sub
+
+    Private Sub Button1_Click(sender As Object, e As EventArgs) Handles GetImageArray.Click
+        If Me.driver.ImageReady() Then
+            Dim currentimagearray(driver.CameraXSize, driver.CameraYSize) As Integer
+            currentimagearray = Me.driver.ImageArray()
+        End If
     End Sub
 
 
