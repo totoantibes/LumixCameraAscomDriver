@@ -657,14 +657,14 @@ Public Class Camera
 
     Public Property Gain() As Short Implements ICameraV2.Gain
         Get
-            TL.LogMessage("Gain Get", "reading the current ISO value")
+            TL.LogMessage("Gain Get", "reading the current ISO value" + CurrentISO)
             Return CurrentISO
             'Throw New ASCOM.PropertyNotImplementedException("Gain", False)
         End Get
         Set(value As Short)
             SendLumixMessage(ISO + value.ToString)
             CurrentISO = value
-            TL.LogMessage("Gain Set", "Setting ISO to " + value.ToString)
+            TL.LogMessage("Gain Set", "Setting ISO to " + ISOTableAL(value.ToString))
             'Throw New ASCOM.PropertyNotImplementedException("Gain", True)
         End Set
     End Property

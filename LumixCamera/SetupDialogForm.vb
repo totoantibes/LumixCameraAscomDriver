@@ -7,13 +7,11 @@ Imports System.Net.NetworkInformation
 Public Class SetupDialogForm
 
     Private Sub OK_Button_Click(ByVal sender As System.Object, ByVal e As System.EventArgs) Handles OK_Button.Click ' OK button event handler
-        'If Camera.IPAddress IsNot Camera.IPAddressDefault Then
-        '    Camera.SendLumixMessage(Camera.ISO + "800")
-        '    Camera.SendLumixMessage(Camera.SHUTTERSPEED + Camera.ShutterTable(55, 0))
-        '    Camera.SendLumixMessage(Camera.QUALITY + "raw_fine")
-        'End If
-        'TBDCRawPath.Text = System.IO.Path.GetFullPath(OpenFileDialog1.FileName)
-        'TBTempPath.Text = System.IO.Path.GetFullPath(OpenFileDialog2.FileName)
+        If Camera.IPAddress IsNot Camera.IPAddressDefault Then
+            Camera.SendLumixMessage(Camera.ISO + CBISO.SelectedItem)
+            Camera.SendLumixMessage(Camera.SHUTTERSPEED + Camera.ShutterTable(CBShutterSpeed.SelectedIndex, 0))
+            Camera.SendLumixMessage(Camera.QUALITY + "raw_fine")
+        End If
         Me.DialogResult = System.Windows.Forms.DialogResult.OK
         Me.Close()
     End Sub
@@ -241,11 +239,11 @@ Public Class SetupDialogForm
 
 
     Private Sub ButtonConnect_Click(sender As Object, e As EventArgs) Handles ButtonConnect.Click
-        If Camera.IPAddress IsNot Camera.IPAddressDefault Then
-            Camera.SendLumixMessage(Camera.ISO + "800")
-            Camera.SendLumixMessage(Camera.SHUTTERSPEED + Camera.ShutterTable(55, 0))
-            Camera.SendLumixMessage(Camera.QUALITY + "raw_fine")
-        End If
+        'If Camera.IPAddress IsNot Camera.IPAddressDefault Then
+        '    Camera.SendLumixMessage(Camera.ISO + "800")
+        '    Camera.SendLumixMessage(Camera.SHUTTERSPEED + Camera.ShutterTable(55, 0))
+        '    Camera.SendLumixMessage(Camera.QUALITY + "raw_fine")
+        'End If
     End Sub
 
 
