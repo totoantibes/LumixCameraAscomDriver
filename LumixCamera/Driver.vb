@@ -657,7 +657,7 @@ Public Class Camera
 
     Public Property Gain() As Short Implements ICameraV2.Gain
         Get
-            TL.LogMessage("Gain Get", "reading the current ISO value" + CurrentISO)
+            TL.LogMessage("Gain Get", "reading the current ISO value" + CurrentISO.ToString)
             Return CurrentISO
             'Throw New ASCOM.PropertyNotImplementedException("Gain", False)
         End Get
@@ -671,17 +671,18 @@ Public Class Camera
 
     Public ReadOnly Property GainMax() As Short Implements ICameraV2.GainMax
         Get
-            TL.LogMessage("GainMax Get", 25000)
-            Return 25000
-            'Throw New ASCOM.PropertyNotImplementedException("GainMax", False)
+            'TL.LogMessage("GainMax Get", 25000)
+            Throw New ASCOM.PropertyNotImplementedException("GainMax", False)
+            'Return 25000
+
         End Get
     End Property
 
     Public ReadOnly Property GainMin() As Short Implements ICameraV2.GainMin
         Get
-            TL.LogMessage("GainMin Get", "80")
-            Return 80
-            'Throw New ASCOM.PropertyNotImplementedException("GainMin", False)
+            'TL.LogMessage("GainMin Get", "80")
+            'Return 80
+            Throw New ASCOM.PropertyNotImplementedException("GainMin", False)
         End Get
     End Property
 

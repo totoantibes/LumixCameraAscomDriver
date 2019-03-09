@@ -175,8 +175,8 @@ Public Class SetupDialogForm
         If CBCameraIPAddress.Items.Contains(Camera.IPAddress) Then
             CBCameraIPAddress.SelectedItem = Camera.IPAddress
         End If
-        'trying to connect to the Lumix Cam
 
+        'trying to connect to the Lumix Cam
         For Each TryIPValue As IPAddress In IPValues
             request = WebRequest.Create("http://" + TryIPValue.ToString + "/" + Camera.STATE)
             request.Timeout = 2000
@@ -210,6 +210,10 @@ Public Class SetupDialogForm
                 End If
             End Try
         Next
+        If SendStatus <> 1 Then
+            System.Windows.Forms.MessageBox.Show("No compatible lumix camera was discovered on the network. You can enter the known IP Address of your cam in the listbox")
+        End If
+
     End Sub
 
 
