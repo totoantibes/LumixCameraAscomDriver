@@ -7,13 +7,13 @@ Imports System.Net.NetworkInformation
 Public Class SetupDialogForm
 
     Private Sub OK_Button_Click(ByVal sender As System.Object, ByVal e As System.EventArgs) Handles OK_Button.Click ' OK button event handler
-        If Camera.IPAddress IsNot Camera.IPAddressDefault Then
-            Camera.SendLumixMessage(Camera.ISO + "800")
-            Camera.SendLumixMessage(Camera.SHUTTERSPEED + Camera.ShutterTable(55, 0))
-            Camera.SendLumixMessage(Camera.QUALITY + "raw_fine")
-        End If
-        TBDCRawPath.Text = System.IO.Path.GetFullPath(OpenFileDialog1.FileName)
-        TBTempPath.Text = FolderBrowserDialog1.SelectedPath + "\"
+        'If Camera.IPAddress IsNot Camera.IPAddressDefault Then
+        '    Camera.SendLumixMessage(Camera.ISO + "800")
+        '    Camera.SendLumixMessage(Camera.SHUTTERSPEED + Camera.ShutterTable(55, 0))
+        '    Camera.SendLumixMessage(Camera.QUALITY + "raw_fine")
+        'End If
+        'TBDCRawPath.Text = System.IO.Path.GetFullPath(OpenFileDialog1.FileName)
+        'TBTempPath.Text = System.IO.Path.GetFullPath(OpenFileDialog2.FileName)
         Me.DialogResult = System.Windows.Forms.DialogResult.OK
         Me.Close()
     End Sub
@@ -228,16 +228,17 @@ Public Class SetupDialogForm
 
     Private Sub Button2_Click(sender As Object, e As EventArgs) Handles ButtonRaw.Click
         If OpenFileDialog1.ShowDialog = DialogResult.OK Then
-            TBDCRawPath.Text = System.IO.Path.GetFullPath(OpenFileDialog1.FileName)
-
+            TBDCRawPath.Text = Path.GetFullPath(OpenFileDialog1.FileName)
         End If
     End Sub
+
 
     Private Sub ButtonTemp_Click(sender As Object, e As EventArgs) Handles ButtonTemp.Click
         If FolderBrowserDialog1.ShowDialog = DialogResult.OK Then
-            TBTempPath.Text = FolderBrowserDialog1.SelectedPath + "\"
+            TBTempPath.Text = Path.GetFullPath(FolderBrowserDialog1.SelectedPath + "\")
         End If
     End Sub
+
 
     Private Sub ButtonConnect_Click(sender As Object, e As EventArgs) Handles ButtonConnect.Click
         If Camera.IPAddress IsNot Camera.IPAddressDefault Then

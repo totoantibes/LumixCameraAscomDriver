@@ -181,7 +181,7 @@ Public Class Camera
     Public Shared CurrentISO As UShort
     Public Shared CurrentSpeed As String
 
-    Public Shared ISOTable = {80, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 2000, 2500, 3200, 4000, 5000, 6400, 8000, 10000, 12800, 16000, 20000, 25600}
+    Public Shared ISOTable = {"auto", "i_iso", "80", "100", "125", "160", "200", "250", "320", "400", "500", "640", "800", "1000", "1250", "1600", "2000", "2500", "3200", "4000", "5000", "6400", "8000", "10000", "12800", "16000", "20000", "25600"}
     Public Shared ShutterTable =
         {{"3072/256", 4000},
         {"2987/256", 3200},
@@ -261,6 +261,8 @@ Public Class Camera
         ROMAL.Add("JPG")
         ROMAL.Add("RAW")
 
+        ISOTableAL.Add("i_auto")
+        ISOTableAL.Add("i_iso")
         ISOTableAL.Add("80")
         ISOTableAL.Add("100")
         ISOTableAL.Add("125")
