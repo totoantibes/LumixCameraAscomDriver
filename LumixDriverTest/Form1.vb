@@ -23,6 +23,7 @@
         Else
             driver = New ASCOM.DriverAccess.Camera(My.Settings.DriverId)
             driver.Connected = True
+            'CBSpeed.DataSource = New BindingSource(driver.)
         End If
         SetUIState()
     End Sub
@@ -69,7 +70,7 @@
     Private Sub ButtonStartExpo_Click(sender As Object, e As EventArgs) Handles ButtonStartExpo.Click
         If IsConnected Then
 
-            Me.driver.StartExposure(10, True)
+            Me.driver.StartExposure(50, True)
 
         Else
             MessageBox.Show("camera not connected")
@@ -85,6 +86,8 @@
             currentimagearray = Me.driver.ImageArray()
         End If
     End Sub
+
+
 
 
     ' TODO: Add additional UI and controls to test more of the driver being tested.

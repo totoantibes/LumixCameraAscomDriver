@@ -52,6 +52,9 @@ Imports ASCOM.Astrometry
 Imports ASCOM.Astrometry.AstroUtils
 Imports ASCOM.DeviceInterface
 Imports ASCOM.Utilities
+Imports System.Threading
+Imports System.Runtime.Remoting.Messaging
+
 'Imports UPNPLib
 
 <Guid("08832ede-d16d-4090-b661-91f670d95f4d")>
@@ -180,6 +183,8 @@ Public Class Camera
     Public Shared CurrentROM As UShort
     Public Shared CurrentISO As UShort
     Public Shared CurrentSpeed As String
+    Private CurrentState As CameraStates = CameraStates.cameraIdle
+    Private CurrentPercentCompleted As Int32 = 0
 
     Public Shared ISOTable = {"auto", "i_iso", "80", "100", "125", "160", "200", "250", "320", "400", "500", "640", "800", "1000", "1250", "1600", "2000", "2500", "3200", "4000", "5000", "6400", "8000", "10000", "12800", "16000", "20000", "25600"}
     Public Shared ShutterTable =
@@ -308,9 +313,9 @@ Public Class Camera
     Public Sub SetupDialog() Implements ICameraV2.SetupDialog
         ' consider only showing the setup dialog if not connected
         ' or call a different dialog if connected
-        If IsConnected Then
-            System.Windows.Forms.MessageBox.Show("Already connected, just press OK")
-        End If
+        'If IsConnected Then
+        '    System.Windows.Forms.MessageBox.Show("Already connected, just press OK")
+        'End If
 
         Using F As SetupDialogForm = New SetupDialogForm()
             Dim result As System.Windows.Forms.DialogResult = F.ShowDialog()
@@ -382,6 +387,7 @@ Public Class Camera
 
                 ReadoutMode = ROMAL.IndexOf(My.Settings.TransferFormat)
                 Gain = Math.Max(0, ISOTableAL.IndexOf(My.Settings.ISO))
+                SendLumixMessage(SHUTTERSPEED + CurrentSpeed)
             Else
                 connectedState = False
                 TL.LogMessage("Connected Set", "Disconnecting from IP Address " + IPAddress)
@@ -520,8 +526,8 @@ Public Class Camera
 
     Public ReadOnly Property CameraState() As CameraStates Implements ICameraV2.CameraState
         Get
-            TL.LogMessage("CameraState Get", CameraStates.cameraIdle.ToString())
-            Return CameraStates.cameraIdle
+            TL.LogMessage("CameraState Get", CurrentState.ToString())
+            Return CurrentState
         End Get
     End Property
 
@@ -821,8 +827,8 @@ Public Class Camera
 
     Public ReadOnly Property MaxADU() As Integer Implements ICameraV2.MaxADU
         Get
-            TL.LogMessage("MaxADU Get", "20000")
-            Return 20000
+            TL.LogMessage("MaxADU Get", "4096")
+            Return 4096
         End Get
     End Property
 
@@ -864,8 +870,9 @@ Public Class Camera
 
     Public ReadOnly Property PercentCompleted() As Short Implements ICameraV2.PercentCompleted
         Get
-            TL.LogMessage("PercentCompleted Get", "Not implemented")
-            Throw New ASCOM.PropertyNotImplementedException("PercentCompleted", False)
+            TL.LogMessage("PercentCompleted Get", CurrentPercentCompleted.ToString())
+            Return CurrentPercentCompleted
+            'Throw New ASCOM.PropertyNotImplementedException("PercentCompleted", False)
         End Get
     End Property
 
@@ -1043,10 +1050,15 @@ Public Class Camera
         End Try
     End Function
 
+
+
+
     'this is the meety method.
     'takes a picture of Duration
     'and gets the image back via http from the camera
     'depending on the transfer format the img is fetched either in RAW or in JPG
+
+
     Public Sub StartExposure(Duration As Double, Light As Boolean) Implements ICameraV2.StartExposure
         If (Duration < 0.0) Then Throw New InvalidValueException("StartExposure", Duration.ToString(), "0.0 upwards")
         If (cameraNumX > ccdWidth) Then Throw New InvalidValueException("StartExposure", cameraNumX.ToString(), ccdWidth.ToString())
@@ -1056,14 +1068,36 @@ Public Class Camera
 
         cameraLastExposureDuration = Duration
         exposureStart = DateTime.Now
+        SendLumixMessage(RECMODE) 'makes sure it is not in playmode...
         SendLumixMessage(SHUTTERSTART)
-        System.Threading.Thread.Sleep(Duration * 1000) ' Sleep for the duration to simulate exposure, assumes the camera is in Bulb mode 
         TL.LogMessage("StartExposure", Duration.ToString() + " " + Light.ToString())
+        CurrentState = CameraStates.cameraExposing
+        Dim d As MyDelegate = AddressOf WaitBulb
+        d.BeginInvoke(Duration, New AsyncCallback(AddressOf ReadImageFromCamera), Nothing)
+    End Sub
+
+    Sub MyCallback(ByVal result As IAsyncResult)
+        Console.WriteLine("Now I know PrintStuff finished")
+        Dim resultClass = CType(result, AsyncResult)
+        Dim d As MyDelegate = CType(resultClass.AsyncDelegate, MyDelegate)
+        TL.LogMessage("Callback from the Bulbcapture also know that the result is: ", d.EndInvoke(result).ToString)
+        CurrentState = CameraStates.cameraIdle
+
+    End Sub
+
+    Private Delegate Function MyDelegate(ByVal Duration As Double) As Boolean
+
+    Function WaitBulb(ByVal Duration As Double) As Boolean
+        TL.LogMessage("waiting while capturing", Duration.ToString)
+        System.Threading.Thread.Sleep(Duration * 1000) ' Sleep for the duration to simulate exposure, if this is in Bulb mode 
         StopExposure()
-        cameraImageReady = True
+        Return True
+    End Function
 
 
 
+
+    Private Sub ReadImageFromCamera()
         Dim Pictures As XmlDocument                     'the XML with all the results from the camea
         Dim PictureList As XmlNodeList                  'the list of picture items extratec
         Dim Picture As XmlNode                          'a singlepicture iteme
@@ -1071,7 +1105,6 @@ Public Class Camera
         Dim nRead(250) As Integer
         Dim j = -1
         Dim SendStatus As Integer = -1
-        Dim statusCode As HttpStatusCode
         Dim length As Integer = 0
         Dim buflen As Integer = 1024
         Dim opts As New NDCRaw.DCRawOptions With {
@@ -1090,11 +1123,14 @@ Public Class Camera
         '.Colorspace = 1
         '}
         Dim DCRawSpace As New NDCRaw.DCRaw(opts)
-
+        cameraImageReady = False
         Pictures = New XmlDocument
         Pictures.LoadXml(GetPix(1)) '1 to get the last pic
         PictureList = Pictures.LastChild.FirstChild.FirstChild.FirstChild.FirstChild.ChildNodes 'items
         SendLumixMessage(PLAYMODE)                'making sure the camera is in Playmode
+        CurrentState = CameraStates.cameraDownload
+        CurrentPercentCompleted = 0
+
         For Each Picture In PictureList
             If ReadoutMode = 1 Then 'RAW
 
@@ -1138,7 +1174,7 @@ Public Class Camera
                             Do
                                 Dim readBytes(buflen - 1) As Byte
                                 bytesread = theResponse.GetResponseStream.Read(readBytes, 0, buflen)
-
+                                CurrentPercentCompleted = 100 * nRead(j) / 19000000
                                 nRead(j) = nRead(j) + bytesread
                                 If bytesread = 0 Then
                                     TL.LogMessage("reached end of stream ", Images(j) & " position " & nRead(j))
@@ -1213,6 +1249,7 @@ Public Class Camera
                         Try
                             Do
                                 Dim readBytes(buflen - 1) As Byte
+                                CurrentPercentCompleted = Math.Min(100 * nRead(j) / 8000000, 100) 'assuming a jpg is not longer than 8MB
                                 bytesread = theResponse.GetResponseStream.Read(readBytes, 0, buflen)
 
                                 nRead(j) = nRead(j) + bytesread
@@ -1268,6 +1305,8 @@ Public Class Camera
                 End If
             End If
         Next
+        CurrentState = CameraStates.cameraIdle
+        cameraImageReady = True
 
     End Sub
 

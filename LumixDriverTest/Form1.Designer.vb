@@ -28,6 +28,8 @@ Partial Class Form1
         Me.ButtonStartExpo = New System.Windows.Forms.Button()
         Me.ButtonStopExpo = New System.Windows.Forms.Button()
         Me.GetImageArray = New System.Windows.Forms.Button()
+        Me.Label1 = New System.Windows.Forms.Label()
+        Me.CBSpeed = New System.Windows.Forms.ComboBox()
         Me.SuspendLayout()
         '
         'labelDriverId
@@ -89,11 +91,31 @@ Partial Class Form1
         Me.GetImageArray.Text = "GetImageArray"
         Me.GetImageArray.UseVisualStyleBackColor = True
         '
+        'Label1
+        '
+        Me.Label1.AutoSize = True
+        Me.Label1.Location = New System.Drawing.Point(13, 96)
+        Me.Label1.Name = "Label1"
+        Me.Label1.Size = New System.Drawing.Size(47, 17)
+        Me.Label1.TabIndex = 9
+        Me.Label1.Text = "speed"
+        '
+        'CBSpeed
+        '
+        Me.CBSpeed.FormattingEnabled = True
+        Me.CBSpeed.Items.AddRange(New Object() {"4000", "3200", "2500", "2000", "1600", "1300", "1000", "800", "640", "500", "400", "320", "250", "200", "160", "125", "100", "80", "60", "50", "40", "30", "25", "20", "15", "13", "10", "8", "6", "5", "4", "3", "2.5", "2", "1.6", "1.3", "1"})
+        Me.CBSpeed.Location = New System.Drawing.Point(83, 96)
+        Me.CBSpeed.Name = "CBSpeed"
+        Me.CBSpeed.Size = New System.Drawing.Size(121, 24)
+        Me.CBSpeed.TabIndex = 10
+        '
         'Form1
         '
         Me.AutoScaleDimensions = New System.Drawing.SizeF(8.0!, 16.0!)
         Me.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font
         Me.ClientSize = New System.Drawing.Size(533, 229)
+        Me.Controls.Add(Me.CBSpeed)
+        Me.Controls.Add(Me.Label1)
         Me.Controls.Add(Me.GetImageArray)
         Me.Controls.Add(Me.ButtonStopExpo)
         Me.Controls.Add(Me.ButtonStartExpo)
@@ -104,6 +126,7 @@ Partial Class Form1
         Me.Name = "Form1"
         Me.Text = "Form1"
         Me.ResumeLayout(False)
+        Me.PerformLayout()
 
     End Sub
     Private WithEvents labelDriverId As System.Windows.Forms.Label
@@ -112,4 +135,6 @@ Partial Class Form1
     Friend WithEvents ButtonStartExpo As Button
     Friend WithEvents ButtonStopExpo As Button
     Friend WithEvents GetImageArray As Button
+    Friend WithEvents Label1 As Label
+    Friend WithEvents CBSpeed As ComboBox
 End Class
