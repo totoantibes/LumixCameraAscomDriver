@@ -1077,7 +1077,6 @@ Public Class Camera
     End Sub
 
     Sub MyCallback(ByVal result As IAsyncResult)
-        Console.WriteLine("Now I know PrintStuff finished")
         Dim resultClass = CType(result, AsyncResult)
         Dim d As MyDelegate = CType(resultClass.AsyncDelegate, MyDelegate)
         TL.LogMessage("Callback from the Bulbcapture also know that the result is: ", d.EndInvoke(result).ToString)
