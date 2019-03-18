@@ -3,23 +3,48 @@
 '
 ' ASCOM Camera driver for LumixG80
 '
-' Description:	provides an interface to the Lumix http over wifi remote control protocol
-'				in order to present lumix cameras as ASCOM cameras and be used by astro photo SW like APT or Indi 
-'				the driver allows to set the speed,iso and format (RAW or RAW+JPG) of the camera  
-'				transfers the image (Raw or JPG) on the PC and exposes the image array in RGB.
-'               It relies on DCRaw to handle the Raw format, or the native VB.NET imaging for JPG
-'               Images are then translated into Tiff and then passed to the image array.
-'               RAW would be preferred but the file is substantially larger and therefore longer to tranfer.
-'               therefore the download is ofter interrupted. the driver tries to recover/continue the DL but it does not always works
-'               this leaves with an incomplete RAW file that is still passed on but not ideal. 
-'               Given the longer transfer time it substantially cuts into the active shooting since all this process is sequential
-'               So if you have a 1mn exposure and it takes 40s to get it onto your driver that is 40s you are not shooting...
-'               Hence the jpg transfer option. file is smaller and transfer faster and should still be valuable for the Astro SW.
-'               in any case the camera keeps the RAW or the RAW+jpg on the SD card and the Astro SW should have a fits file from the driver.
-'               the transfered files (jpg or raw) and intermediary tiff files are deletedas soon as needed in order to save disk space.
-'
-'               code is quite nasty and could use some factoring into further utility classes/methods etc.
-'
+'This driver provides an interface to the Lumix http over wifi remote control protocol
+'in order to present lumix cameras as ASCOM cameras and be used by astro photo SW like APT or Indi 
+'The camera believes that it is connected to the Panasonic ImageApp
+
+'Driver has been tested with the G80 but shouldwork with all Wifi Lumix using the same sensor size.
+
+'It assumes the 16MP sensor.
+
+'To connect to the camera:
+'1) On the camera (similar to what is needed with the Panasonic ImageApp)
+'	a) set it to "M"
+'	b) connect to a wifi network (best if local hotspot_
+'	c) Camera waits for an app to connect 
+'2) on the PC
+'	a) launch the Imaging SW (e.g. APT)
+'	b) chose the LumixG80 Ascom from the chooser window
+'	c) click properties
+'	d) the driver will look for the Lumix camera on the local network and connect to it (the camera should say "under remote control"
+'	e) set the ISO, Speed and Transfer mode (JPG or Raw): read below for details
+'	f) Temp folder to store the file from the camera.
+'	g) Path to the DCraw.exe file that is required to deal with the RAW file from the camera. This File is distributed with the setup and should be in 
+'C:\Program Files (x86)\Common Files\ASCOM\Camera
+'	h) hit ok.
+
+'The driver allows to set the speed,iso and format (RAW or RAW+JPG) of the camera  
+'transfers the image (Raw or JPG) on the PC and exposes the image array in RGB.
+
+'It relies on DCRaw to handle the Raw format, or the native VB.NET imaging for JPG
+'Images are then translated into Tiff and then passed to the image array.
+
+'RAW would be preferred but the file is substantially larger and therefore longer to tranfer.
+'therefore the download is often interrupted. the driver tries to recover/continue the DL but it does not always works
+'this leaves with an incomplete RAW file that is still passed on but not ideal. 
+
+'Given the longer transfer time it substantially cuts into the active shooting since all this process is sequential
+'So if you have a 1mn exposure and it takes 40s to get it onto your driver that is 40s you are not shooting...
+
+'Hence the jpg transfer option. file is smaller and transfer faster and should still be valuable for the Astro SW.
+'in any case the camera keeps the RAW or the RAW+jpg on the SD card and the Astro SW should have a fits file from the driver.
+'the transfered files (jpg or raw) and intermediary tiff files are deleted as soon as needed in order to save disk space.
+'code is quite nasty and could use some factoring into further utility classes/methods etc.
+''
 ' Implements:	ASCOM Camera interface version: 1.0
 ' Author:		robert hasson robert_hasson@yahoo.com
 '
@@ -177,7 +202,8 @@ Public Class Camera
     Friend Shared TempPath As String '= "C:\Users\robert.hasson\Documents\XMLLumix\"
     Friend Shared IPAddressDefault As String = "localhost"
     Public Shared outputarray As New NDCRaw.DCRawResult
-    Public ROM = {"JPG", "RAW"}
+    Public ROM = {"JPG", "RAW", "Thumb"}
+    Private JPEGPixelOffset As Int16 = 20
     Public ROMAL As New ArrayList
     Public ISOTableAL As New ArrayList
     Public Shared CurrentROM As UShort
@@ -265,6 +291,7 @@ Public Class Camera
 
         ROMAL.Add("JPG")
         ROMAL.Add("RAW")
+        ROMAL.Add("Thumb")
 
         ISOTableAL.Add("i_auto")
         ISOTableAL.Add("i_iso")
@@ -293,6 +320,45 @@ Public Class Camera
         ISOTableAL.Add("16000")
         ISOTableAL.Add("20000")
         ISOTableAL.Add("25600")
+
+        Resolutions(0)._resolution = "12M"
+        Resolutions(0)._X = 4011
+        Resolutions(0)._Y = 3016
+
+        Resolutions(1)._resolution = "16M"
+        Resolutions(1)._X = 4612
+        Resolutions(1)._Y = 3468
+
+        Resolutions(2)._resolution = "20M"
+        Resolutions(2)._X = 5200
+        Resolutions(2)._Y = 3910
+
+
+        ResolutionsJPG(0)._resolution = "12M"
+        ResolutionsJPG(0)._X = 3991
+        ResolutionsJPG(0)._Y = 2998
+
+        ResolutionsJPG(1)._resolution = "16M"
+        ResolutionsJPG(1)._X = 4592
+        ResolutionsJPG(1)._Y = 3448  '3468
+
+        ResolutionsJPG(2)._resolution = "20M"
+        ResolutionsJPG(2)._X = 5180
+        ResolutionsJPG(2)._Y = 3890
+
+        ResolutionsThumb(0)._resolution = "12M"
+        ResolutionsThumb(0)._X = 1440
+        ResolutionsThumb(0)._Y = 1080
+
+        ResolutionsThumb(1)._resolution = "16M"
+        ResolutionsThumb(1)._X = 1440
+        ResolutionsThumb(1)._Y = 1080
+
+        ResolutionsThumb(2)._resolution = "20M"
+        ResolutionsThumb(2)._X = 1440
+        ResolutionsThumb(2)._Y = 1080
+
+
 
         'TODO: Implement your additional construction here
 
@@ -384,10 +450,32 @@ Public Class Camera
                 DCrawPath = My.Settings.DCRawPath '"C:\Users\robert.hasson\source\repos\LumixCamera\packages\NDCRaw.0.5.2\lib\net461\dcraw-9.27-ms-64-bit.exe"
                 TempPath = My.Settings.TempPath
                 CurrentSpeed = My.Settings.Speed
-
                 ReadoutMode = ROMAL.IndexOf(My.Settings.TransferFormat)
                 Gain = Math.Max(0, ISOTableAL.IndexOf(My.Settings.ISO))
                 SendLumixMessage(SHUTTERSPEED + CurrentSpeed)
+
+                Dim index As UShort = Array.FindIndex(Resolutions, Function(f) f._resolution = My.Settings.Resolution)
+                Select Case ReadoutMode
+                    Case 0 'jpg
+                        ccdWidth = ResolutionsJPG(index)._X
+                        ccdHeight = ResolutionsJPG(index)._Y
+
+                    Case 1  'raw
+                        ccdWidth = Resolutions(index)._X
+                        ccdHeight = Resolutions(index)._Y
+                    Case 2  'thumb
+                        ccdWidth = ResolutionsThumb(index)._X
+                        ccdHeight = ResolutionsThumb(index)._Y
+                End Select
+
+                pixelSize = Math.Round(1000 * sensormmx / ccdWidth, 2) 'should be 3.75 if 16MP... 
+
+                cameraNumX = ccdWidth
+                cameraNumY = ccdHeight
+
+
+
+
             Else
                 connectedState = False
                 TL.LogMessage("Connected Set", "Disconnecting from IP Address " + IPAddress)
@@ -453,9 +541,26 @@ Public Class Camera
 
 #Region "ICamera Implementation"
 
-    Private Const ccdWidth As Integer = 4608 ' Constants to define the ccd pixel dimenstions
-    Private Const ccdHeight As Integer = 3064
-    Private Const pixelSize As Double = 3.75 ' Constant for the pixel physical dimension
+    Private ccdWidth As Integer = 4612 ' Constants to define the ccd pixel dimenstions
+    Private ccdHeight As Integer = 3468 ' (default for 16MP)
+    Private Const sensormmx As Double = 17.3
+    Private Const sensormmy As Double = 13
+
+    Private pixelSize As Double = 1000 * sensormmx / ccdWidth '3.75  Constant for the pixel physical dimension
+    Private MFTresolutions = {{"12M", 4011, 3016}, {"16M", 4612, 3468}, {"20M", 5200, 3910}} '5200 x 3910 4011 x 3016
+
+
+    Private Structure MFTResolution
+        Dim _resolution As String
+        Dim _X As Int32
+        Dim _Y As Int32
+    End Structure
+
+    Private ReadOnly Resolutions(3) As MFTResolution ' = New MFTResolution(("12M", 4011, 3016), ("16M", 4612, 3468}, {"20M", 5200, 3910}) '5200 x 3910 4011 x 3016
+    Private ReadOnly ResolutionsJPG(3) As MFTResolution ' = New MFTResolution(("12M", 4011, 3016), ("16M", 4612, 3468}, {"20M", 5200, 3910}) '5200 x 3910 4011 x 3016
+    Private ReadOnly ResolutionsThumb(3) As MFTResolution ' = New MFTResolution(("12M", 4011, 3016), ("16M", 4612, 3468}, {"20M", 5200, 3910}) '5200 x 3910 4011 x 3016
+
+
 
     Private cameraNumX As Integer = ccdWidth ' Initialise variables to hold values required for functionality tested by Conform
     Private cameraNumY As Integer = ccdHeight 'note that somehow the JPG file is not exactly this size but smaller. However we ignore that for now
@@ -903,11 +1008,12 @@ Public Class Camera
         End Get
         Set(value As Short)
             TL.LogMessage("ReadoutMode Set", ROM(value).ToString)
-            If value = 0 Then
-                SendLumixMessage(QUALITY + "raw_fine")
-            Else
-                SendLumixMessage(QUALITY + "raw")
-            End If
+            Select Case value
+                Case 0, 2
+                    SendLumixMessage(QUALITY + "raw_fine")
+                Case 1
+                    SendLumixMessage(QUALITY + "raw")
+            End Select
             CurrentROM = value
             'Throw New ASCOM.PropertyNotImplementedException("ReadoutMode", True)
         End Set
@@ -915,7 +1021,7 @@ Public Class Camera
 
     Public ReadOnly Property ReadoutModes() As ArrayList Implements ICameraV2.ReadoutModes
         Get
-            TL.LogMessage("ReadoutModes Get", "JPG or RAW")
+            TL.LogMessage("ReadoutModes Get", "JPG, RAW or Thumb")
             Return ROMAL
             'Throw New ASCOM.PropertyNotImplementedException("ReadoutModes", False)
         End Get
@@ -1208,10 +1314,20 @@ Public Class Camera
 
 
                 End If
-            Else
-                If Picture.ChildNodes(3).InnerText.Contains(".JPG") And Picture.ChildNodes(3).InnerText.Contains("DO") Then  'JPG rmember to set it back to "DO"
+            Else 'JPG or Thumbnails
+                Dim lookuptag As String
+                Dim lookupNum As UShort
+                If ReadoutMode = 0 Then
+                    lookuptag = "DO" 'full JPG
+                    lookupNum = 3
+                Else
+                    lookuptag = "DL"  'large thumbnail
+                    lookupNum = 5
+                End If
+
+                If Picture.ChildNodes(lookupNum).InnerText.Contains(".JPG") And Picture.ChildNodes(lookupNum).InnerText.Contains(lookuptag) Then
                     j = j + 1
-                    Images(j) = Picture.ChildNodes(3).InnerText  'RAW or JPG
+                    Images(j) = Picture.ChildNodes(lookupNum).InnerText  'RAW or JPG
                     nRead(j) = 0
                     Dim theResponse As HttpWebResponse
                     Dim theRequest As HttpWebRequest

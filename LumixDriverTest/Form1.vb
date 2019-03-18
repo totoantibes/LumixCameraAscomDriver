@@ -70,7 +70,7 @@
     Private Sub ButtonStartExpo_Click(sender As Object, e As EventArgs) Handles ButtonStartExpo.Click
         If IsConnected Then
 
-            Me.driver.StartExposure(50, True)
+            Me.driver.StartExposure(10, True)
 
         Else
             MessageBox.Show("camera not connected")

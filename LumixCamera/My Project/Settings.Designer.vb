@@ -137,6 +137,18 @@ Namespace My
                 Me("DCRawPath") = value
             End Set
         End Property
+        
+        <Global.System.Configuration.UserScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("")>  _
+        Public Property Resolution() As String
+            Get
+                Return CType(Me("Resolution"),String)
+            End Get
+            Set
+                Me("Resolution") = value
+            End Set
+        End Property
     End Class
 End Namespace
 

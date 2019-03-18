@@ -210,9 +210,9 @@ Public Class SetupDialogForm
                 End If
             End Try
         Next
-        If SendStatus <> 1 Then
-            System.Windows.Forms.MessageBox.Show("No compatible lumix camera was discovered on the network. You can enter the known IP Address of your cam in the listbox")
-        End If
+        'If SendStatus <> 1 Then
+        '    System.Windows.Forms.MessageBox.Show("No compatible lumix camera was discovered on the network. You can enter the known IP Address of your cam in the listbox")
+        'End If
 
     End Sub
 
@@ -241,14 +241,6 @@ Public Class SetupDialogForm
         End If
     End Sub
 
-
-    Private Sub ButtonConnect_Click(sender As Object, e As EventArgs) Handles ButtonConnect.Click
-        'If Camera.IPAddress IsNot Camera.IPAddressDefault Then
-        '    Camera.SendLumixMessage(Camera.ISO + "800")
-        '    Camera.SendLumixMessage(Camera.SHUTTERSPEED + Camera.ShutterTable(55, 0))
-        '    Camera.SendLumixMessage(Camera.QUALITY + "raw_fine")
-        'End If
-    End Sub
 
 
 End Class
