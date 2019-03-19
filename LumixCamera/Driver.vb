@@ -1422,6 +1422,7 @@ Public Class Camera
         Next
         CurrentState = CameraStates.cameraIdle
         cameraImageReady = True
+        TL.LogMessage("ïmageready", "true")
 
     End Sub
 
