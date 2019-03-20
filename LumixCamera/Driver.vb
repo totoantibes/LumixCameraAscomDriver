@@ -1,15 +1,20 @@
 ' --------------------------------------------------------------------------------
 ' TODO fill in this information for your driver, then remove this line!
-'
+
 ' ASCOM Camera driver for LumixG80
-'
+
 'This driver provides an interface to the Lumix http over wifi remote control protocol
 'in order to present lumix cameras as ASCOM cameras and be used by astro photo SW like APT or Indi 
 'The camera believes that it is connected to the Panasonic ImageApp
 
 'Driver has been tested with the G80 but shouldwork with all Wifi Lumix using the same sensor size.
 
-'It assumes the 16MP sensor.
+'16MP sensor was the prototype. Now it is possible to work with a range of 
+' - 10M (GH5S) 
+' - 12MP(GH1) 
+' - 16MP (GH4, G80)
+' - 20MP (GH5, G9 etc).
+
 
 'To connect to the camera:
 '1) On the camera (similar to what is needed with the Panasonic ImageApp)
@@ -20,12 +25,13 @@
 '	a) launch the Imaging SW (e.g. APT)
 '	b) chose the LumixG80 Ascom from the chooser window
 '	c) click properties
-'	d) the driver will look for the Lumix camera on the local network and connect to it (the camera should say "under remote control"
+'	d) the driver will look for the Lumix camera on the local network and connect to it (the camera should say "under remote control")
 '	e) set the ISO, Speed and Transfer mode (JPG or Raw): read below for details
-'	f) Temp folder to store the file from the camera.
-'	g) Path to the DCraw.exe file that is required to deal with the RAW file from the camera. This File is distributed with the setup and should be in 
+'   f) select the correct resolution for your camera. I hope to make it "discoverable" soon)  
+'	g) Temp folder to store the file from the camera.
+'	h) Path to the DCraw.exe file that is required to deal with the RAW file from the camera. This File is distributed with the setup and should be in 
 'C:\Program Files (x86)\Common Files\ASCOM\Camera
-'	h) hit ok.
+'	i) hit ok.
 
 'The driver allows to set the speed,iso and format (RAW or RAW+JPG) of the camera  
 'transfers the image (Raw or JPG) on the PC and exposes the image array in RGB.
@@ -44,7 +50,11 @@
 'in any case the camera keeps the RAW or the RAW+jpg on the SD card and the Astro SW should have a fits file from the driver.
 'the transfered files (jpg or raw) and intermediary tiff files are deleted as soon as needed in order to save disk space.
 'code is quite nasty and could use some factoring into further utility classes/methods etc.
-''
+
+'I added a "thumb" transfer mode ehich takes a large thumbnail of the image  (1440x1080) in order to further reduce the trnasfer size. 
+' not sure if this helps much and if it will screw up the platesolving since now resolution is different from the actual sensor size. 
+'in this case though the pixelpitch is changed in the driver so to help in that process.
+
 ' Implements:	ASCOM Camera interface version: 1.0
 ' Author:		robert hasson robert_hasson@yahoo.com
 '
@@ -321,6 +331,10 @@ Public Class Camera
         ISOTableAL.Add("20000")
         ISOTableAL.Add("25600")
 
+        Resolutions(3)._resolution = "10M"
+        Resolutions(3)._X = 3697
+        Resolutions(3)._Y = 2780
+
         Resolutions(0)._resolution = "12M"
         Resolutions(0)._X = 4011
         Resolutions(0)._Y = 3016
@@ -346,6 +360,10 @@ Public Class Camera
         ResolutionsJPG(2)._X = 5180
         ResolutionsJPG(2)._Y = 3890
 
+        ResolutionsJPG(3)._resolution = "10M"
+        ResolutionsJPG(3)._X = 3680
+        ResolutionsJPG(3)._Y = 2760
+
         ResolutionsThumb(0)._resolution = "12M"
         ResolutionsThumb(0)._X = 1440
         ResolutionsThumb(0)._Y = 1080
@@ -358,6 +376,9 @@ Public Class Camera
         ResolutionsThumb(2)._X = 1440
         ResolutionsThumb(2)._Y = 1080
 
+        ResolutionsThumb(3)._resolution = "10M"
+        ResolutionsThumb(3)._X = 1440
+        ResolutionsThumb(3)._Y = 1080
 
 
         'TODO: Implement your additional construction here
@@ -455,6 +476,8 @@ Public Class Camera
                 SendLumixMessage(SHUTTERSPEED + CurrentSpeed)
 
                 Dim index As UShort = Array.FindIndex(Resolutions, Function(f) f._resolution = My.Settings.Resolution)
+
+
                 Select Case ReadoutMode
                     Case 0 'jpg
                         ccdWidth = ResolutionsJPG(index)._X
@@ -556,9 +579,9 @@ Public Class Camera
         Dim _Y As Int32
     End Structure
 
-    Private ReadOnly Resolutions(3) As MFTResolution ' = New MFTResolution(("12M", 4011, 3016), ("16M", 4612, 3468}, {"20M", 5200, 3910}) '5200 x 3910 4011 x 3016
-    Private ReadOnly ResolutionsJPG(3) As MFTResolution ' = New MFTResolution(("12M", 4011, 3016), ("16M", 4612, 3468}, {"20M", 5200, 3910}) '5200 x 3910 4011 x 3016
-    Private ReadOnly ResolutionsThumb(3) As MFTResolution ' = New MFTResolution(("12M", 4011, 3016), ("16M", 4612, 3468}, {"20M", 5200, 3910}) '5200 x 3910 4011 x 3016
+    Private ReadOnly Resolutions(4) As MFTResolution ' = New MFTResolution(("12M", 4011, 3016), ("16M", 4612, 3468}, {"20M", 5200, 3910}) '5200 x 3910 4011 x 3016
+    Private ReadOnly ResolutionsJPG(4) As MFTResolution ' = New MFTResolution(("12M", 4011, 3016), ("16M", 4612, 3468}, {"20M", 5200, 3910}) '5200 x 3910 4011 x 3016
+    Private ReadOnly ResolutionsThumb(4) As MFTResolution ' = New MFTResolution(("12M", 4011, 3016), ("16M", 4612, 3468}, {"20M", 5200, 3910}) '5200 x 3910 4011 x 3016
 
 
 
@@ -866,7 +889,7 @@ Public Class Camera
             Tiffimagefile.Dispose() 'cleaning up aftermyself and removing the Tiff file once it is used
             My.Computer.FileSystem.DeleteFile(TiffFileName)
 
-            TL.LogMessage("ImageArray Get", "getting the Array")
+            TL.LogMessage("ImageArray Get", "gettmfting the Array")
 
             Return cameraImageArray
         End Get

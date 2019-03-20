@@ -38,7 +38,6 @@ Partial Class SetupDialogForm
         Me.Label2 = New System.Windows.Forms.Label()
         Me.Label5 = New System.Windows.Forms.Label()
         Me.OpenFileDialog1 = New System.Windows.Forms.OpenFileDialog()
-        Me.OpenFileDialog2 = New System.Windows.Forms.OpenFileDialog()
         Me.FolderBrowserDialog1 = New System.Windows.Forms.FolderBrowserDialog()
         Me.Label6 = New System.Windows.Forms.Label()
         Me.CBResolution = New System.Windows.Forms.ComboBox()
@@ -190,12 +189,6 @@ Partial Class SetupDialogForm
         Me.OpenFileDialog1.InitialDirectory = """C:\Users\robert.hasson\source\repos\LumixCamera\packages\NDCRaw.0.5.2\lib\net461" &
     "\"
         '
-        'OpenFileDialog2
-        '
-        Me.OpenFileDialog2.FileName = "dcraw-9.27-ms-64-bit.exe"
-        Me.OpenFileDialog2.InitialDirectory = """C:\Users\robert.hasson\source\repos\LumixCamera\packages\NDCRaw.0.5.2\lib\net461" &
-    "\"
-        '
         'Label6
         '
         Me.Label6.AutoSize = True
@@ -210,11 +203,11 @@ Partial Class SetupDialogForm
         '
         Me.CBResolution.DataBindings.Add(New System.Windows.Forms.Binding("Text", Global.ASCOM.LumixG80.My.MySettings.Default, "Resolution", True, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged))
         Me.CBResolution.FormattingEnabled = True
-        Me.CBResolution.Items.AddRange(New Object() {"12M", "16M", "20M"})
+        Me.CBResolution.Items.AddRange(New Object() {"10M", "12M", "16M", "20M"})
         Me.CBResolution.Location = New System.Drawing.Point(161, 116)
         Me.CBResolution.Name = "CBResolution"
         Me.CBResolution.Size = New System.Drawing.Size(121, 24)
-        Me.CBResolution.TabIndex = 11
+        Me.CBResolution.TabIndex = 2
         Me.CBResolution.Text = Global.ASCOM.LumixG80.My.MySettings.Default.Resolution
         '
         'TBTempPath
@@ -349,7 +342,6 @@ Partial Class SetupDialogForm
     Private WithEvents Label5 As Label
     Friend WithEvents TBDCRawPath As TextBox
     Friend WithEvents TBTempPath As TextBox
-    Friend WithEvents OpenFileDialog2 As OpenFileDialog
     Friend WithEvents FolderBrowserDialog1 As FolderBrowserDialog
     Friend WithEvents CBResolution As ComboBox
     Private WithEvents Label6 As Label
