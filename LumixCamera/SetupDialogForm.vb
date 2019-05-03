@@ -1,5 +1,6 @@
 Imports System.IO
 Imports System.Net
+Imports System.Data
 Imports System.Net.NetworkInformation
 
 
@@ -10,9 +11,17 @@ Public Class SetupDialogForm
         If Camera.IPAddress IsNot Camera.IPAddressDefault Then
             Camera.SendLumixMessage(Camera.ISO + CBISO.SelectedItem)
             Camera.SendLumixMessage(Camera.SHUTTERSPEED + Camera.ShutterTable(CBShutterSpeed.SelectedIndex, 0))
-            Camera.SendLumixMessage(Camera.QUALITY + "raw_fine")
+
+            If CBReadoutMode.SelectedItem.ToString.Equals("JPG") Or CBReadoutMode.SelectedItem.ToString.Equals("Thumb") Then
+                Camera.SendLumixMessage(Camera.QUALITY + "raw_fine")
+            End If
+
+            If CBReadoutMode.SelectedItem.ToString.Equals("RAW") Then
+                Camera.SendLumixMessage(Camera.QUALITY + "raw")
+            End If
+
         End If
-        Me.DialogResult = System.Windows.Forms.DialogResult.OK
+            Me.DialogResult = System.Windows.Forms.DialogResult.OK
         Me.Close()
     End Sub
 
@@ -166,6 +175,7 @@ Public Class SetupDialogForm
         Dim SendStatus As Integer = -1
         Dim statusCode As HttpStatusCode
         Dim ResponseText As String
+        Dim dsResponse As DataSet
 
 
         Dim IPValues As New List(Of IPAddress)(GetAllDevicesOnLAN().Keys)
@@ -178,12 +188,13 @@ Public Class SetupDialogForm
 
         'trying to connect to the Lumix Cam
         For Each TryIPValue As IPAddress In IPValues
-            request = WebRequest.Create("http://" + TryIPValue.ToString + "/" + Camera.STATE)
+            request = WebRequest.Create("http://" + TryIPValue.ToString + "/" + Camera.CURMENU)
             request.Timeout = 2000
             Try
                 Dim myWebResponse = CType(request.GetResponse(), HttpWebResponse)
-                myStreamReader = New StreamReader(myWebResponse.GetResponseStream())
-                ResponseText = myStreamReader.ReadToEnd
+                dsResponse = New DataSet()
+                dsResponse.ReadXml(myWebResponse.GetResponseStream())
+
                 If myWebResponse.StatusCode = HttpStatusCode.Accepted Or myWebResponse.StatusCode = 200 Then
                     SendStatus = 1 'message sent successfully
                     CBCameraIPAddress.SelectedItem = TryIPValue

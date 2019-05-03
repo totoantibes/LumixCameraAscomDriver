@@ -121,7 +121,9 @@ Public Class Camera
     'list of html commads to talk to the lumix camera
     'Cam Info
     Public Shared STATE As String = "cam.cgi?mode=getstate"
-    Private CAPABILITY As String = "cam.cgi?mode=getinfo&type=capability"
+    Public Shared CAPABILITY As String = "cam.cgi?mode=getinfo&type=capability"
+    Public Shared ALLMENU As String = "cam.cgi?mode=getinfo&type=allmenu"
+    Public Shared CURMENU As String = "cam.cgi?mode=getinfo&type=curmenu"
     Private LENSINFO As String = "cam.cgi?mode=getinfo&type=lens"
 
     'Cam Network
