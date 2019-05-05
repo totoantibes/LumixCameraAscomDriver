@@ -1,12 +1,10 @@
- TODO fill in this information for your driver, then remove this line!
-
- ASCOM Camera driver for LumixG80
+ASCOM Camera driver for Lumix
 
 This driver provides an interface to the Lumix http over wifi remote control protocol
 in order to present lumix cameras as ASCOM cameras and be used by astro photo SW like APT or Indi 
 The camera believes that it is connected to the Panasonic ImageApp
 
-Driver has been tested with the G80 but shouldwork with all Wifi Lumix using the same sensor size.
+Driver has been tested with the G80 but shouldwork with all Wifi Lumix.
 
 16MP sensor was the prototype. Now it is possible to work with a range of 
  - 10M (GH5S) 
