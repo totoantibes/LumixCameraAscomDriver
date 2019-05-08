@@ -4,7 +4,7 @@ This driver provides an interface to the Lumix http over wifi remote control pro
 in order to present lumix cameras as ASCOM cameras and be used by astro photo SW like APT or Indi 
 The camera believes that it is connected to the Panasonic ImageApp
 
-Driver has been tested with the G80 but shouldwork with all Wifi Lumix.
+Driver has been tested with the G80, GH$ and GH5s but shouldwork with all Wifi Lumix.
 
 16MP sensor was the prototype. Now it is possible to work with a range of 
  - 10M (GH5S) 
@@ -18,6 +18,8 @@ To connect to the camera:
 	a) set it to "M"
 	b) connect to a wifi network (best if local hotspot_
 	c) Camera waits for an app to connect 
+	d) best if camera is set to manual focus too.
+	e) make sure there is an SD card too. (this error is not handled yet)
 2) on the PC
 	a) launch the Imaging SW (e.g. APT)
 	b) chose the LumixG80 Ascom from the chooser window
@@ -51,6 +53,10 @@ code is quite nasty and could use some factoring into further utility classes/me
 I added a "thumb" transfer mode ehich takes a large thumbnail of the image  (1440x1080) in order to further reduce the trnasfer size. 
  not sure if this helps much and if it will screw up the platesolving since now resolution is different from the actual sensor size. 
 in this case though the pixelpitch is changed in the driver so to help in that process.
+
+Lastly there is still a pending issue with 14 bit RAWs fram GH5s. this has to do with DCRaw that does not yet handle this format. 
+for that reason it is best for GH5s to use JPG format
+
 
  Implements:	ASCOM Camera interface version: 1.0
  Author:		robert hasson robert_hasson@yahoo.com
