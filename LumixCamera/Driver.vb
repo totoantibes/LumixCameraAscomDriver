@@ -572,7 +572,7 @@ Public Class Camera
     Private Const sensormmy As Double = 13
 
     Private pixelSize As Double = 1000 * sensormmx / ccdWidth '3.75  Constant for the pixel physical dimension
-    Private MFTresolutions = {{"12M", 4011, 3016}, {"16M", 4612, 3468}, {"20M", 5200, 3910}} '5200 x 3910 4011 x 3016
+    Private MFTresolutions = {{"10M", 3697, 2780}, {"12M", 4011, 3016}, {"16M", 4612, 3468}, {"20M", 5200, 3910}} '5200 x 3910 4011 x 3016
 
 
     Private Structure MFTResolution
@@ -880,9 +880,9 @@ Public Class Camera
                 For y = 0 To (cameraNumY - 1)
                     For x = 0 To (cameraNumX - 1)
                         index = x * 3 + (y * stride)
-                        cameraImageArray(cameraNumX - x - 1, cameraNumY - y - 1, 0) = pixels(index + 2) 'R and B are reversed
-                        cameraImageArray(cameraNumX - x - 1, cameraNumY - y - 1, 1) = pixels(index + 1)
-                        cameraImageArray(cameraNumX - x - 1, cameraNumY - y - 1, 2) = pixels(index)
+                        cameraImageArray(x, cameraNumY - y - 1, 0) = pixels(index + 2) 'R and B are reversed
+                        cameraImageArray(x, cameraNumY - y - 1, 1) = pixels(index + 1)
+                        cameraImageArray(x, cameraNumY - y - 1, 2) = pixels(index)
 
                     Next x
                 Next y
@@ -1122,7 +1122,7 @@ Public Class Camera
                 Return answer
 
             Else
-                Return Nothing
+                Return ""
             End If
         Catch e As WebException
             If (e.Status = WebExceptionStatus.ProtocolError) Then
@@ -1134,18 +1134,20 @@ Public Class Camera
                         myStreamReader = New StreamReader(response.GetResponseStream())
                         Using (myStreamReader)
                             ResponseText = myStreamReader.ReadToEnd & "Status Description = " & httpResponse.StatusDescription ' HttpWebResponse.StatusDescription
-                            Return Nothing
+                            Return ""
                         End Using
                     Catch ex As Exception
                         'TL.LogMessage("Message" + LumixMessage + " Sent Failed", LumixMessage + " failed")
                     End Try
                 End Using
             End If
+            Return ""
         End Try
-        'Return Nothing
     End Function
-    'formats a message to be sent to the maera
 
+
+
+    'formats a message to be sent to the maera
     Public Shared Function SendLumixMessage(LumixMessage As String) As String
         Dim request = WebRequest.Create("http://" + Camera.IPAddress + "/" + LumixMessage)
         Dim myStreamReader As StreamReader
@@ -1230,7 +1232,7 @@ Public Class Camera
     Private Sub ReadImageFromCamera()
         Dim Pictures As XmlDocument                     'the XML with all the results from the camea
         Dim PictureList As XmlNodeList                  'the list of picture items extratec
-        Dim Picture As XmlNode                          'a singlepicture iteme
+        Dim Picture As XmlNode                          'a singlepicture item
         Dim Images(250) As String 'the array of the urls in the camera
         Dim nRead(250) As Integer
         Dim j = -1
@@ -1255,90 +1257,27 @@ Public Class Camera
         Dim DCRawSpace As New NDCRaw.DCRaw(opts)
         cameraImageReady = False
         Pictures = New XmlDocument
-        Pictures.LoadXml(GetPix(1)) '1 to get the last pic
+        Dim PictureString As String
+        PictureString = GetPix(1)
+        If PictureString IsNot "" Then
+            Pictures.LoadXml(GetPix(1)) '1 to get the last pic
+        Else
+            Throw New Exception
+        End If
         PictureList = Pictures.LastChild.FirstChild.FirstChild.FirstChild.FirstChild.ChildNodes 'items
         SendLumixMessage(PLAYMODE)                'making sure the camera is in Playmode
         CurrentState = CameraStates.cameraDownload
         CurrentPercentCompleted = 0
-
         For Each Picture In PictureList
+            '' look for the name of the file to DL ... either RAW or JPG based on the readoutmode
             If ReadoutMode = 1 Then 'RAW
-
                 If Picture.ChildNodes(3).InnerText.Contains("RAW") Then   'RAW
                     j = j + 1
                     Images(j) = Picture.ChildNodes(3).InnerText  'RAW or JPG
-                    nRead(j) = 0
-                    Dim theResponse As HttpWebResponse
-                    Dim theRequest As HttpWebRequest
-                    Dim bytesread As Integer = 0
-                    Do
-                        theRequest = HttpWebRequest.Create(Images(j))
-                        TL.LogMessage("reading stream ", Images(j) & " position " & nRead(j))
-                        theRequest.KeepAlive = True
-                        theRequest.ProtocolVersion = HttpVersion.Version11
-                        theRequest.ServicePoint.ConnectionLimit = 1
-                        If nRead(j) > 0 Then
-                            theRequest.AddRange(nRead(j))
-                            GetPix(1) 'if the file not found happened then this trick is to get the camera in a readmode again and making sure it remembers the filename
-                            TL.LogMessage("continuing the read where it stopped", Images(j) & " position " & nRead(j))
-
-                        End If
-
-                        Try
-                            theResponse = theRequest.GetResponse()
-
-                        Catch ex As Exception
-
-                            TL.LogMessage("error in reading stream ", Images(j) & " position " & nRead(j))
-                            Exit Do
-
-                        End Try
-                        Dim writeStream As IO.FileStream
-                        writeStream = New FileStream(TempPath & Images(j).Substring(Images(j).Length - 13), IO.FileMode.OpenOrCreate)
-                        If nRead(j) > 0 Then
-                            writeStream.Position = nRead(j)
-                        End If
-
-                        TL.LogMessage("opening or creating  file", Images(j))
-                        Try
-                            Do
-                                Dim readBytes(buflen - 1) As Byte
-                                bytesread = theResponse.GetResponseStream.Read(readBytes, 0, buflen)
-                                CurrentPercentCompleted = 100 * nRead(j) / 19000000
-                                nRead(j) = nRead(j) + bytesread
-                                If bytesread = 0 Then
-                                    TL.LogMessage("reached end of stream ", Images(j) & " position " & nRead(j))
-                                    Exit Do
-                                End If
-                                writeStream.Write(readBytes, 0, bytesread)
-                                writeStream.Flush()
-
-                            Loop
-                            theResponse.GetResponseStream.Close()
-                            writeStream.Flush()
-                            writeStream.Close()
-
-                        Catch e As System.IO.IOException
-                            TL.LogMessage("camera stopped streaming  ", Images(j) & " position  " & nRead(j))
-                            nRead(j) -= 8 * buflen
-                            theResponse.GetResponseStream.Close()
-                            writeStream.Flush()
-                            writeStream.Close()
-                        End Try
-
-                    Loop While bytesread > 0
-
-                    Try
-                        outputarray = DCRawSpace.Convert(TempPath & Images(j).Substring(Images(j).Length - 13))
-                        TiffFileName = outputarray.OutputFilename
-                        outputarray = Nothing
-                        My.Computer.FileSystem.DeleteFile(TempPath & Images(j).Substring(Images(j).Length - 13))
-                    Catch e As Exception
-                        TL.LogMessage("Converting to tiff via DCRAW", Images(j) & " file not found")
-                    End Try
-
-
+                Else
+                    Continue For
                 End If
+
             Else 'JPG or Thumbnails
                 Dim lookuptag As String
                 Dim lookupNum As UShort
@@ -1347,104 +1286,124 @@ Public Class Camera
                     lookupNum = 3
                 Else
                     lookuptag = "DL"  'large thumbnail
-                    lookupNum = 5
+                    If My.Settings.Resolution = "10M" Then              '''this really is a hack. truely i should look for the attribute tag CAM_LRGTN in the XML. 
+                        lookupNum = 6
+                    Else
+                        lookupNum = 5
+                    End If
+
+
                 End If
 
-                If Picture.ChildNodes(lookupNum).InnerText.Contains(".JPG") And Picture.ChildNodes(lookupNum).InnerText.Contains(lookuptag) Then
+                    If Picture.ChildNodes(lookupNum).InnerText.Contains(".JPG") And Picture.ChildNodes(lookupNum).InnerText.Contains(lookuptag) Then
                     j = j + 1
-                    Images(j) = Picture.ChildNodes(lookupNum).InnerText  'RAW or JPG
-                    nRead(j) = 0
-                    Dim theResponse As HttpWebResponse
-                    Dim theRequest As HttpWebRequest
-                    Dim bytesread As Integer = 0
-                    Do
-                        theRequest = HttpWebRequest.Create(Images(j))
-                        TL.LogMessage("reading stream ", Images(j) & " position " & nRead(j))
-                        theRequest.KeepAlive = True
-                        theRequest.ProtocolVersion = HttpVersion.Version11
-                        theRequest.ServicePoint.ConnectionLimit = 1
-                        If nRead(j) > 0 Then
-                            theRequest.AddRange(nRead(j))
-                            GetPix(1) 'if the file not found happened then this trick is to get the camera in a readmode again and making sure it remembers the filename
-                            TL.LogMessage("continuing the read where it stopped", Images(j) & " position " & nRead(j))
-
-                        End If
-
-                        Try
-                            theResponse = theRequest.GetResponse()
-
-                        Catch ex As Exception
-
-                            TL.LogMessage("error in reading stream ", Images(j) & " position " & nRead(j))
-                            Exit Do
-
-                        End Try
-                        Dim writeStream As IO.FileStream
-                        writeStream = New FileStream(TempPath & Images(j).Substring(Images(j).Length - 13), IO.FileMode.OpenOrCreate)
-                        If nRead(j) > 0 Then
-                            writeStream.Position = nRead(j)
-                        End If
-
-                        TL.LogMessage("opening or creating  file", Images(j))
-                        Try
-                            Do
-                                Dim readBytes(buflen - 1) As Byte
-                                CurrentPercentCompleted = Math.Min(100 * nRead(j) / 8000000, 100) 'assuming a jpg is not longer than 8MB
-                                bytesread = theResponse.GetResponseStream.Read(readBytes, 0, buflen)
-
-                                nRead(j) = nRead(j) + bytesread
-                                If bytesread = 0 Then
-                                    TL.LogMessage("reached end of stream ", Images(j) & " position " & nRead(j))
-                                    Exit Do
-                                End If
-                                writeStream.Write(readBytes, 0, bytesread)
-                                writeStream.Flush()
-                            Loop
-                            theResponse.GetResponseStream.Close()
-                            writeStream.Flush()
-                            writeStream.Close()
-
-                        Catch e As System.IO.IOException
-                            TL.LogMessage("camera stopped streaming  ", Images(j) & " position  " & nRead(j))
-                            nRead(j) -= 8 * buflen
-                            theResponse.GetResponseStream.Close()
-                            writeStream.Flush()
-                            writeStream.Close()
-                        End Try
-
-                    Loop While bytesread > 0
-
-
-
-                    Try
-                        Dim myEncoder As System.Drawing.Imaging.Encoder
-                        Dim myImageCodecInfo As ImageCodecInfo
-                        Dim myEncoderParameter As EncoderParameter
-                        Dim myEncoderParameters As EncoderParameters
-                        Dim imagepath = TempPath & Images(j).Substring(Images(j).Length - 13)
-                        Dim jpg = Image.FromFile(imagepath)
-                        myImageCodecInfo = GetEncoderInfo("image/tiff")
-
-                        TiffFileName = imagepath.Substring(0, imagepath.Length() - 3) + "tif"
-                        myEncoder = System.Drawing.Imaging.Encoder.ColorDepth
-                        myEncoderParameters = New EncoderParameters(1)
-
-                        ' Save the image with a color depth of 24 bits per pixel.
-                        myEncoderParameter = New EncoderParameter(myEncoder, CType(24L, Int32))
-                        myEncoderParameters.Param(0) = myEncoderParameter
-
-                        jpg.Save(TiffFileName, myImageCodecInfo, myEncoderParameters)
-                        jpg.Dispose() 'cleaning up aftermyself and removing the jpg file once it is used and transformed into a tiff
-                        My.Computer.FileSystem.DeleteFile(imagepath)
-
-                    Catch e As Exception
-                        TL.LogMessage("Converting to tiff via vb", Images(j) & " file not found")
-                    End Try
-
-
+                    Images(j) = Picture.ChildNodes(lookupNum).InnerText
+                Else
+                    Continue For
                 End If
             End If
+            'Now we download the image 
+
+            nRead(j) = 0
+
+            Dim theResponse As HttpWebResponse
+            Dim theRequest As HttpWebRequest
+            Dim bytesread As Integer = 0
+            Do
+                theRequest = HttpWebRequest.Create(Images(j))
+                TL.LogMessage("reading stream ", Images(j) & " position " & nRead(j))
+                theRequest.KeepAlive = True
+                theRequest.ProtocolVersion = HttpVersion.Version11
+                theRequest.ServicePoint.ConnectionLimit = 1
+                If nRead(j) > 0 Then
+                    theRequest.AddRange(nRead(j))
+                    GetPix(1) 'if the file not found happened then this trick is to get the camera in a readmode again and making sure it remembers the filename
+                    TL.LogMessage("continuing the read where it stopped", Images(j) & " position " & nRead(j))
+
+                End If
+
+                Try
+                    theResponse = theRequest.GetResponse()
+
+                Catch ex As Exception
+
+                    TL.LogMessage("error in reading stream ", Images(j) & " position " & nRead(j))
+                    Exit Do
+
+                End Try
+                Dim writeStream As IO.FileStream
+                writeStream = New FileStream(TempPath & Images(j).Substring(Images(j).Length - 13), IO.FileMode.OpenOrCreate)
+                If nRead(j) > 0 Then
+                    writeStream.Position = nRead(j)
+                End If
+
+                TL.LogMessage("opening or creating  file", Images(j))
+                Try
+                    Do
+                        Dim readBytes(buflen - 1) As Byte
+                        CurrentPercentCompleted = Math.Min(100 * nRead(j) / 8000000, 100) 'assuming a jpg is not longer than 8MB
+                        bytesread = theResponse.GetResponseStream.Read(readBytes, 0, buflen)
+
+                        nRead(j) = nRead(j) + bytesread
+                        If bytesread = 0 Then
+                            TL.LogMessage("reached end of stream ", Images(j) & " position " & nRead(j))
+                            Exit Do
+                        End If
+                        writeStream.Write(readBytes, 0, bytesread)
+                        writeStream.Flush()
+                    Loop
+                    theResponse.GetResponseStream.Close()
+                    writeStream.Flush()
+                    writeStream.Close()
+
+                Catch e As System.IO.IOException
+                    TL.LogMessage("camera stopped streaming  ", Images(j) & " position  " & nRead(j))
+                    nRead(j) -= 8 * buflen
+                    theResponse.GetResponseStream.Close()
+                    writeStream.Flush()
+                    writeStream.Close()
+                End Try
+
+            Loop While bytesread > 0
+
+            If ReadoutMode = 1 Then
+                Try
+                    outputarray = DCRawSpace.Convert(TempPath & Images(j).Substring(Images(j).Length - 13))
+                    TiffFileName = outputarray.OutputFilename
+                    outputarray = Nothing
+                    My.Computer.FileSystem.DeleteFile(TempPath & Images(j).Substring(Images(j).Length - 13))
+                Catch e As Exception
+                    TL.LogMessage("Converting to tiff via DCRAW", Images(j) & " file not found")
+                End Try
+            Else
+                Try
+                    Dim myEncoder As System.Drawing.Imaging.Encoder
+                    Dim myImageCodecInfo As ImageCodecInfo
+                    Dim myEncoderParameter As EncoderParameter
+                    Dim myEncoderParameters As EncoderParameters
+                    Dim imagepath = TempPath & Images(j).Substring(Images(j).Length - 13)
+                    Dim jpg = Image.FromFile(imagepath)
+                    myImageCodecInfo = GetEncoderInfo("image/tiff")
+
+                    TiffFileName = imagepath.Substring(0, imagepath.Length() - 3) + "tif"
+                    myEncoder = System.Drawing.Imaging.Encoder.ColorDepth
+                    myEncoderParameters = New EncoderParameters(1)
+
+                    ' Save the image with a color depth of 24 bits per pixel.
+                    myEncoderParameter = New EncoderParameter(myEncoder, CType(24L, Int32))
+                    myEncoderParameters.Param(0) = myEncoderParameter
+
+                    jpg.Save(TiffFileName, myImageCodecInfo, myEncoderParameters)
+                    jpg.Dispose() 'cleaning up aftermyself and removing the jpg file once it is used and transformed into a tiff
+                    My.Computer.FileSystem.DeleteFile(imagepath)
+
+                Catch e As Exception
+                    TL.LogMessage("Converting to tiff via vb", Images(j) & " file not found")
+                End Try
+            End If
+
         Next
+
         CurrentState = CameraStates.cameraIdle
         cameraImageReady = True
         TL.LogMessage("ïmageready", "true")

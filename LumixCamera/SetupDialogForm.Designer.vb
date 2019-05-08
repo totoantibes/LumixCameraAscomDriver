@@ -315,7 +315,7 @@ Partial Class SetupDialogForm
         Me.Name = "SetupDialogForm"
         Me.ShowInTaskbar = False
         Me.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen
-        Me.Text = "1"
+        Me.Text = "Lumix Setup Form"
         Me.TableLayoutPanel1.ResumeLayout(False)
         CType(Me.PictureBox1, System.ComponentModel.ISupportInitialize).EndInit()
         Me.ResumeLayout(False)

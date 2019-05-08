@@ -128,7 +128,7 @@ Namespace My
         
         <Global.System.Configuration.UserScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
-         Global.System.Configuration.DefaultSettingValueAttribute("dcraw-9.27-ms-64-bit.exe")>  _
+         Global.System.Configuration.DefaultSettingValueAttribute("dcraw.exe")>  _
         Public Property DCRawPath() As String
             Get
                 Return CType(Me("DCRawPath"),String)

@@ -21,7 +21,7 @@
       <Value Profile="(Default)" />
     </Setting>
     <Setting Name="DCRawPath" Type="System.String" Scope="User">
-      <Value Profile="(Default)">dcraw-9.27-ms-64-bit.exe</Value>
+      <Value Profile="(Default)">dcraw.exe</Value>
     </Setting>
     <Setting Name="Resolution" Type="System.String" Scope="User">
       <Value Profile="(Default)" />
