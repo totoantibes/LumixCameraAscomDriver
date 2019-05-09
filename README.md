@@ -1,27 +1,27 @@
-#ASCOM Camera driver for Lumix
+# ASCOM Camera driver for Panasonic Lumix Cameras
 
 ## Purpose
 
 This driver provides an interface to the Lumix http over wifi remote control protocol in order to present lumix cameras as ASCOM cameras and be used by astro photo software like APT. The camera believes that it is connected to the Panasonic ImageApp
 
 The driver was tested with the G80, GH4 and GH5s but should work with all Wifi Lumix.
-
-
-Note: 
-* Since ASCOM does not expose any "liveView" or video mode this is not implemented here. 
-Mostly this driver sets the ISO (i.e. Gain), ShutterSpeed, Capture (Start and abort) and GetImageArray methods along with other needed methods for ASCOM.
-
-All settings are stored in the ASCOM Proflie Explorer
-Trace log is stored in default ASCOM location 
-
-* Presumably could also work with the full frame S series from Panasonic since it shares the same http protocol, however the driver assumes micro 4/3  sensor size to derive pixel sizes so some adjustments may be needed to work with S series full frame.
-
-
-16MP sensor was the prototype. Now it is possible to work with a range of 
+16MP sensor was the prototype. Now it is possible to work with a range of sensor sizes such as:  
  * 10M (GH5S) 
  * 12MP(GH1) 
  * 16MP (GH4, G80)
  * 20MP (GH5, G9 etc).
+
+
+Notes: 
+1. Since ASCOM does not expose any "liveView" or video mode this is not implemented here. 
+Mostly this driver sets the ISO (i.e. Gain), ShutterSpeed, Capture (Start and abort) and GetImageArray methods along with other needed methods for ASCOM.
+
+3. All settings are stored in the ASCOM Proflie Explorer
+4. Trace log is stored in default ASCOM location 
+
+2. Presumably could also work with the full frame S series from Panasonic since it shares the same http protocol, however the driver assumes micro 4/3  sensor size to derive pixel sizes so some adjustments may be needed to work with S series full frame.
+
+
  
 ## Usage
 
@@ -34,20 +34,21 @@ To connect to the camera:
 	5.	Camera waits for an app to connect 
 2.	on the PC
 	1. launch the Imaging SW (e.g. APT)
-![](./readme_files/image011.png)
+	![](./readme_files/image011.png)
 	2. choose the LumixG80 Ascom from the chooser window and click properties
-![](./readme_files/image013.png)
+	![](./readme_files/image013.png)
 	3. the driver will look for the Lumix camera on the local wifi network and connect to it (the camera should say "under remote control")
-![](./readme_files/image014.png)	
-	d.	set the ISO, Speed and Transfer mode (JPG, Thumb or Raw): read below for details
+	
+	![](./readme_files/image014.png)	
+	4.	set the ISO, Speed and Transfer mode (JPG, Thumb or Raw): read below for details
 	5.	select the correct resolution for your camera. I hope to make it "discoverable" soon)  
 	f.	Temp folder to store the file from the camera.
 	8.	Path to the DCraw.exe file that is required to deal with the RAW file from the camera. This File is distributed with the setup and should be in C:\Program Files (x86)\Common Files\ASCOM\Camera
 	9.	hit ok.
 	10.	The Astro SW then gets data from the driver like the pixel pitch but does not get the temperature… in your Astro Software you can then set the Bulb seconds of the capture the gain etc. 
-![](./readme_files/image007.png)
+	![](./readme_files/image007.png)
 	11. You can now shoot!
-![](./readme_files/image014.png)
+	![](./readme_files/image017.png)
 	 
 
 The driver allows to set the speed, iso and format (RAW or RAW+JPG) of the camera  
@@ -85,3 +86,9 @@ Implements:	ASCOM Camera interface version: 2.0
  MedallionScript: https://github.com/madelson/MedallionShell
 
 the lumix Wifi interface protocol is heavily discussed here: https://www.personal-view.com/talks/discussion/6703/control-your-gh3-from-a-web-browser-now-with-video-/p1
+
+# License
+Copyright (c) 2019 < robert hasson robert_hasson@yahoo.com>
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
