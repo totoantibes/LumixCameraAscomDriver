@@ -413,6 +413,7 @@ Public Class Camera
             Else
                 My.Settings.Reload()
             End If
+            Connected = True
         End Using
     End Sub
 
@@ -461,16 +462,12 @@ Public Class Camera
         End Get
         Set(value As Boolean)
             TL.LogMessage("Connected Set", value.ToString())
-            If value = IsConnected Then
-                Return
-            End If
-
             If value Then
                 connectedState = True
                 TL.LogMessage("Connected Set", "Connecting to IP Address " + IPAddress)
                 ' TODO connect to the device
                 IPAddress = My.Settings.IPAddress
-                DCrawPath = My.Settings.DCRawPath '"C:\Users\robert.hasson\source\repos\LumixCamera\packages\NDCRaw.0.5.2\lib\net461\dcraw-9.27-ms-64-bit.exe"
+                DCrawPath = My.Settings.DCRawPath
                 TempPath = My.Settings.TempPath
                 CurrentSpeed = My.Settings.Speed
                 ReadoutMode = ROMAL.IndexOf(My.Settings.TransferFormat)
@@ -868,9 +865,9 @@ Public Class Camera
                 For y = 0 To (cameraNumY - 1)
                     For x = 0 To (cameraNumX - 1)
                         index = x * 3 + (y * stride / 2) 'because of the 16 bit instead of the 8 bit per channel this /2 is needed.
-                        cameraImageArray(cameraNumX - x - 1, cameraNumY - y - 1, 0) = pixels(index)
-                        cameraImageArray(cameraNumX - x - 1, cameraNumY - y - 1, 1) = pixels(index + 1)
-                        cameraImageArray(cameraNumX - x - 1, cameraNumY - y - 1, 2) = pixels(index + 2)
+                        cameraImageArray(x, cameraNumY - y - 1, 0) = pixels(index)
+                        cameraImageArray(x, cameraNumY - y - 1, 1) = pixels(index + 1)
+                        cameraImageArray(x, cameraNumY - y - 1, 2) = pixels(index + 2)
 
                     Next x
                 Next y
@@ -891,7 +888,7 @@ Public Class Camera
             Tiffimagefile.Dispose() 'cleaning up aftermyself and removing the Tiff file once it is used
             My.Computer.FileSystem.DeleteFile(TiffFileName)
 
-            TL.LogMessage("ImageArray Get", "gettmfting the Array")
+            TL.LogMessage("ImageArray Get", "getting the Array")
 
             Return cameraImageArray
         End Get

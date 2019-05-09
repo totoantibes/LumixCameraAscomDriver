@@ -16,7 +16,7 @@ MinVersion=0,5.0.2195sp4
 DefaultDirName="{cf}\ASCOM\Camera"
 DisableDirPage=yes
 DisableProgramGroupPage=yes
-OutputDir="."
+;OutputDir="."
 OutputBaseFilename="ASCOM.LumixG80.Camera Setup"
 Compression=lzma
 SolidCompression=yes
@@ -25,6 +25,7 @@ WizardImageFile="C:\Program Files (x86)\ASCOM\Platform 6 Developer Components\In
 LicenseFile="C:\Program Files (x86)\ASCOM\Platform 6 Developer Components\Installer Generator\Resources\CreativeCommons.txt"
 ; {cf}\ASCOM\Uninstall\Camera folder created by Platform, always
 UninstallFilesDir="{cf}\ASCOM\Uninstall\Camera\ASCOM.LumixG80.Camera"
+OutputDir=Z:\
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -36,8 +37,9 @@ Name: "{cf}\ASCOM\Uninstall\Camera\ASCOM.LumixG80.Camera"
 [Files]
 Source: "C:\Users\robert.hasson\source\repos\LumixCamera\LumixCamera\bin\Release\ASCOM.LumixG80.Camera.dll"; DestDir: "{app}"
 ; Require a read-me HTML to appear after installation, maybe driver's Help doc
-Source: "C:\Users\robert.hasson\source\repos\LumixCamera\LumixCamera\ReadMe.md"; DestDir: "{app}"; Flags: isreadme
+Source: "C:\Users\robert.hasson\source\repos\LumixCamera\readme.htm"; DestDir: "{app}"; Flags: isreadme
 ; TODO: Add other files needed by your driver here (add subfolders above)
+Source: "C:\Users\robert.hasson\source\repos\LumixCamera\readme_files\*"; DestDir: "{app}\readme_files\"; 
 Source: "C:\Users\robert.hasson\source\repos\LumixCamera\packages\NDCRaw.0.5.2\lib\net461\dcraw.exe"; DestDir: "{app}"; 
 Source: "C:\Users\robert.hasson\source\repos\LumixCamera\packages\NDCRaw.0.5.2\lib\net461\NDCRaw.dll"; DestDir: "{app}"; 
 Source: "C:\Users\robert.hasson\source\repos\LumixCamera\packages\MedallionShell.1.5.1\lib\net45\MedallionShell.dll"; DestDir: "{app}"; 

@@ -1,12 +1,23 @@
 ASCOM Camera driver for Lumix
 
- I Purpose
+ I. Purpose
 
 This driver provides an interface to the Lumix http over wifi remote control protocol
 in order to present lumix cameras as ASCOM cameras and be used by astro photo SW like APT or Indi 
 The camera believes that it is connected to the Panasonic ImageApp
 
-Driver has been tested with the G80, GH$ and GH5s but shouldwork with all Wifi Lumix.
+Driver has been tested with the G80, GH4 and GH5s but shouldwork with all Wifi Lumix.
+
+
+Note: 
+1) Since ASCOM does not expose any "liveView"or video mode this is not implemented here. 
+Mostly this driver sets the ISO (e.g. Gain),ShutterSpeed, Capture (Start and abort) and GetImageArray methods along with other needed methods for ASCOM.
+All settings are stored in the ASCOM Proflie Explorer
+Trace log is stored in deafult ASCOM location 
+
+2) Presumably could also work with the full frame S series from Panasonic since it shares the same http protocol. 
+However the driver assumes MFT sensor size to derive pixel sizes etc. 
+
 
 16MP sensor was the prototype. Now it is possible to work with a range of 
  - 10M (GH5S) 
@@ -14,7 +25,7 @@ Driver has been tested with the G80, GH$ and GH5s but shouldwork with all Wifi L
  - 16MP (GH4, G80)
  - 20MP (GH5, G9 etc).
  
-II Usage
+II. Usage
 
 To connect to the camera:
 1) On the camera (similar to what is needed with the Panasonic ImageApp)
@@ -63,7 +74,14 @@ for that reason it is best for GH5s to use JPG format
 III Installation:
 for windows 32 and 64 bit.
 download and run ASCOM.LumixG80.Camera Setup.exe. 
-
-
- Implements:	ASCOM Camera interface version: 1.0
+ Implements:	ASCOM Camera interface version: 2.0
  Author:		robert hasson robert_hasson@yahoo.com
+  this is freaware. no support, no liability whatsoever, use at your own risk, etc...
+
+ Credits to 
+ ASCOM library : https://ascom-standards.org/
+ DCRaw: https://www.cybercom.net/~dcoffin/dcraw/
+ NDCRaw : https://github.com/AerisG222/NDCRaw
+ MedallionScript: https://github.com/madelson/MedallionShell
+
+ the lumix Wifi interface protocol is heavily discussed here: https://www.personal-view.com/talks/discussion/6703/control-your-gh3-from-a-web-browser-now-with-video-/p1
