@@ -34,7 +34,7 @@ To connect to the camera:
 	5.	Camera waits for an app to connect 
 2.	on the PC
 	1. launch the Imaging SW (e.g. APT)
-!(/readme_files/image011.png)
+![!](./readme_files/image011.png)
 	2. choose the LumixG80 Ascom from the chooser window and click properties
 !(/readme_files/image013.png)
 	3. the driver will look for the Lumix camera on the local wifi network and connect to it (the camera should say "under remote control")
@@ -77,8 +77,11 @@ Implements:	ASCOM Camera interface version: 2.0
 
 # Credits to 
  ASCOM library : https://ascom-standards.org/
+
  DCRaw: https://www.cybercom.net/~dcoffin/dcraw/
+ 
  NDCRaw : https://github.com/AerisG222/NDCRaw
+ 
  MedallionScript: https://github.com/madelson/MedallionShell
 
 the lumix Wifi interface protocol is heavily discussed here: https://www.personal-view.com/talks/discussion/6703/control-your-gh3-from-a-web-browser-now-with-video-/p1
