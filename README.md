@@ -34,20 +34,20 @@ To connect to the camera:
 	5.	Camera waits for an app to connect 
 2.	on the PC
 	1. launch the Imaging SW (e.g. APT)
-![!](./readme_files/image011.png)
+![](./readme_files/image011.png)
 	2. choose the LumixG80 Ascom from the chooser window and click properties
-!(/readme_files/image013.png)
+![](./readme_files/image013.png)
 	3. the driver will look for the Lumix camera on the local wifi network and connect to it (the camera should say "under remote control")
-[!/readme_files/image014.png]	
+![](./readme_files/image014.png)	
 	d.	set the ISO, Speed and Transfer mode (JPG, Thumb or Raw): read below for details
 	5.	select the correct resolution for your camera. I hope to make it "discoverable" soon)  
 	f.	Temp folder to store the file from the camera.
 	8.	Path to the DCraw.exe file that is required to deal with the RAW file from the camera. This File is distributed with the setup and should be in C:\Program Files (x86)\Common Files\ASCOM\Camera
 	9.	hit ok.
 	10.	The Astro SW then gets data from the driver like the pixel pitch but does not get the temperature… in your Astro Software you can then set the Bulb seconds of the capture the gain etc. 
-[!/readme_files/image007.png]
+![](./readme_files/image007.png)
 	11. You can now shoot!
-[!/readme_files/image014.png]
+![](./readme_files/image014.png)
 	 
 
 The driver allows to set the speed, iso and format (RAW or RAW+JPG) of the camera  
