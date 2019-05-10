@@ -113,7 +113,7 @@ Public Class Camera
 
 
     '----- Lumix constants ------
-    Private MODEL As String = "LUMIX"
+    Public Shared MODEL As String = "LUMIX"
 
     '----- HTTP ------------
     Private ReadOnly USER_AGENT As String = "Mozilla/5.0"
@@ -218,11 +218,13 @@ Public Class Camera
     Private JPEGPixelOffset As Int16 = 20
     Public ROMAL As New ArrayList
     Public ISOTableAL As New ArrayList
+    Public Shared Models As New Hashtable
     Public Shared CurrentROM As UShort
     Public Shared CurrentISO As UShort
     Public Shared CurrentSpeed As String
     Private CurrentState As CameraStates = CameraStates.cameraIdle
     Private CurrentPercentCompleted As Int32 = 0
+
 
     Public Shared ISOTable = {"auto", "i_iso", "80", "100", "125", "160", "200", "250", "320", "400", "500", "640", "800", "1000", "1250", "1600", "2000", "2500", "3200", "4000", "5000", "6400", "8000", "10000", "12800", "16000", "20000", "25600"}
     Public Shared ShutterTable =
@@ -284,6 +286,9 @@ Public Class Camera
         {"16384/256", "B"}
 }
 
+    Public Shared ResolutionTable = {"10.2", "12.1", "16.0", "16.05", "20.0", "20.3", "24.2", "47.3"}
+
+
     '
     ' Constructor - Must be public for COM registration!
     '
@@ -333,48 +338,97 @@ Public Class Camera
         ISOTableAL.Add("20000")
         ISOTableAL.Add("25600")
 
-        Resolutions(3)._resolution = "10M"
-        Resolutions(3)._X = 3697
-        Resolutions(3)._Y = 2780
+        Models.Add("GX9", "20.3")
+        Models.Add("GF10", "16.0")
+        Models.Add("GH5S", "10.2")
+        Models.Add("G9", "20.3")
+        Models.Add("GH5", "20.3")
+        Models.Add("GF9", "16.0")
+        Models.Add("GX800", "16.0")
+        Models.Add("GX850", "16.0")
+        Models.Add("G80", "16.0")
+        Models.Add("G81", "16.0")
+        Models.Add("G85", "16.0")
+        Models.Add("GX80", "16.0")
+        Models.Add("GX85", "16.0")
+        Models.Add("G95", "20.3")
+        Models.Add("GF8", "16.0")
+        Models.Add("GX8", "20.3")
+        Models.Add("G7", "16.0")
+        Models.Add("GF7", "16.0")
+        Models.Add("GM5", "16.0")
+        Models.Add("GM1", "16.0")
+        Models.Add("GX7", "16.0")
+        Models.Add("GH4", "16.05")
+        Models.Add("GH3", "16.05")
+        Models.Add("GH2", "16.05")
+        Models.Add("GH1", "12.1")
+        Models.Add("G6", "16.05")
+        Models.Add("GF6", "16.0")
+        Models.Add("S1", "24.2")
+        Models.Add("S1R", "47.3")
 
-        Resolutions(0)._resolution = "12M"
+
+        '"10.2", "12.1", "16.0", "16.05", "20.0", "20.3", "24.2", "47.3"
+
+        Resolutions(0)._resolution = "12.1"
         Resolutions(0)._X = 4011
         Resolutions(0)._Y = 3016
 
-        Resolutions(1)._resolution = "16M"
+        Resolutions(1)._resolution = "16.0"
         Resolutions(1)._X = 4612
         Resolutions(1)._Y = 3468
 
-        Resolutions(2)._resolution = "20M"
+        Resolutions(2)._resolution = "20.0"
         Resolutions(2)._X = 5200
         Resolutions(2)._Y = 3910
 
+        Resolutions(3)._resolution = "10.2"
+        Resolutions(3)._X = 3697
+        Resolutions(3)._Y = 2780
 
-        ResolutionsJPG(0)._resolution = "12M"
+        Resolutions(4)._resolution = "16.05"
+        Resolutions(4)._X = 4620
+        Resolutions(4)._Y = 3474
+
+        Resolutions(5)._resolution = "20.3"
+        Resolutions(5)._X = 5196
+        Resolutions(5)._Y = 3907
+
+        Resolutions(6)._resolution = "24.2"
+        Resolutions(6)._X = 6000
+        Resolutions(6)._Y = 4000
+
+        Resolutions(6)._resolution = "47.3"
+        Resolutions(6)._X = 8368
+        Resolutions(6)._Y = 5584
+
+
+        ResolutionsJPG(0)._resolution = "12.1"
         ResolutionsJPG(0)._X = 3991
         ResolutionsJPG(0)._Y = 2998
 
-        ResolutionsJPG(1)._resolution = "16M"
+        ResolutionsJPG(1)._resolution = "16.0"
         ResolutionsJPG(1)._X = 4592
         ResolutionsJPG(1)._Y = 3448  '3468
 
-        ResolutionsJPG(2)._resolution = "20M"
+        ResolutionsJPG(2)._resolution = "20.0"
         ResolutionsJPG(2)._X = 5180
         ResolutionsJPG(2)._Y = 3890
 
-        ResolutionsJPG(3)._resolution = "10M"
+        ResolutionsJPG(3)._resolution = "10.2"
         ResolutionsJPG(3)._X = 3680
         ResolutionsJPG(3)._Y = 2760
 
-        ResolutionsThumb(0)._resolution = "12M"
+        ResolutionsThumb(0)._resolution = "12.1"
         ResolutionsThumb(0)._X = 1440
         ResolutionsThumb(0)._Y = 1080
 
-        ResolutionsThumb(1)._resolution = "16M"
+        ResolutionsThumb(1)._resolution = "16.0"
         ResolutionsThumb(1)._X = 1440
         ResolutionsThumb(1)._Y = 1080
 
-        ResolutionsThumb(2)._resolution = "20M"
+        ResolutionsThumb(2)._resolution = "20.0"
         ResolutionsThumb(2)._X = 1440
         ResolutionsThumb(2)._Y = 1080
 
@@ -565,8 +619,8 @@ Public Class Camera
 
     Private ccdWidth As Integer = 4612 ' Constants to define the ccd pixel dimenstions
     Private ccdHeight As Integer = 3468 ' (default for 16MP)
-    Private Const sensormmx As Double = 17.3
-    Private Const sensormmy As Double = 13
+    Private sensormmx As Double = 17.3
+    Private sensormmy As Double = 13
 
     Private pixelSize As Double = 1000 * sensormmx / ccdWidth '3.75  Constant for the pixel physical dimension
     Private MFTresolutions = {{"10M", 3697, 2780}, {"12M", 4011, 3016}, {"16M", 4612, 3468}, {"20M", 5200, 3910}} '5200 x 3910 4011 x 3016
@@ -578,9 +632,9 @@ Public Class Camera
         Dim _Y As Int32
     End Structure
 
-    Private ReadOnly Resolutions(4) As MFTResolution ' = New MFTResolution(("12M", 4011, 3016), ("16M", 4612, 3468}, {"20M", 5200, 3910}) '5200 x 3910 4011 x 3016
-    Private ReadOnly ResolutionsJPG(4) As MFTResolution ' = New MFTResolution(("12M", 4011, 3016), ("16M", 4612, 3468}, {"20M", 5200, 3910}) '5200 x 3910 4011 x 3016
-    Private ReadOnly ResolutionsThumb(4) As MFTResolution ' = New MFTResolution(("12M", 4011, 3016), ("16M", 4612, 3468}, {"20M", 5200, 3910}) '5200 x 3910 4011 x 3016
+    Private ReadOnly Resolutions(ResolutionTable.Length) As MFTResolution ' = New MFTResolution(("12M", 4011, 3016), ("16M", 4612, 3468}, {"20M", 5200, 3910}) '5200 x 3910 4011 x 3016
+    Private ReadOnly ResolutionsJPG(ResolutionTable.Length) As MFTResolution ' = New MFTResolution(("12M", 4011, 3016), ("16M", 4612, 3468}, {"20M", 5200, 3910}) '5200 x 3910 4011 x 3016
+    Private ReadOnly ResolutionsThumb(ResolutionTable.Length) As MFTResolution ' = New MFTResolution(("12M", 4011, 3016), ("16M", 4612, 3468}, {"20M", 5200, 3910}) '5200 x 3910 4011 x 3016
 
 
 
@@ -1051,8 +1105,8 @@ Public Class Camera
 
     Public ReadOnly Property SensorName() As String Implements ICameraV2.SensorName
         Get
-            TL.LogMessage("SensorName Get", "Panasonic Lumix G80")
-            Return "Panasonic Lumix G80"
+            TL.LogMessage("SensorName Get", "Panasonic Lumix" + Camera.MODEL)
+            Return "Panasonic Lumix" + Camera.MODEL
             'Throw New ASCOM.PropertyNotImplementedException("SensorName", False)
         End Get
     End Property

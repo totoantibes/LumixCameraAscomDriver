@@ -48,6 +48,8 @@ Partial Class SetupDialogForm
         Me.CBISO = New System.Windows.Forms.ComboBox()
         Me.CBCameraIPAddress = New System.Windows.Forms.ComboBox()
         Me.chkTrace = New System.Windows.Forms.CheckBox()
+        Me.Label7 = New System.Windows.Forms.Label()
+        Me.Label8 = New System.Windows.Forms.Label()
         Me.TableLayoutPanel1.SuspendLayout()
         CType(Me.PictureBox1, System.ComponentModel.ISupportInitialize).BeginInit()
         Me.SuspendLayout()
@@ -60,7 +62,7 @@ Partial Class SetupDialogForm
         Me.TableLayoutPanel1.ColumnStyles.Add(New System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 50.0!))
         Me.TableLayoutPanel1.Controls.Add(Me.OK_Button, 0, 0)
         Me.TableLayoutPanel1.Controls.Add(Me.Cancel_Button, 1, 0)
-        Me.TableLayoutPanel1.Location = New System.Drawing.Point(219, 456)
+        Me.TableLayoutPanel1.Location = New System.Drawing.Point(219, 470)
         Me.TableLayoutPanel1.Margin = New System.Windows.Forms.Padding(4)
         Me.TableLayoutPanel1.Name = "TableLayoutPanel1"
         Me.TableLayoutPanel1.RowCount = 1
@@ -94,7 +96,7 @@ Partial Class SetupDialogForm
         Me.PictureBox1.Anchor = CType((System.Windows.Forms.AnchorStyles.Top Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
         Me.PictureBox1.Cursor = System.Windows.Forms.Cursors.Hand
         Me.PictureBox1.Image = Global.ASCOM.LumixG80.My.Resources.Resources.ASCOM
-        Me.PictureBox1.Location = New System.Drawing.Point(342, 363)
+        Me.PictureBox1.Location = New System.Drawing.Point(341, 393)
         Me.PictureBox1.Margin = New System.Windows.Forms.Padding(4)
         Me.PictureBox1.Name = "PictureBox1"
         Me.PictureBox1.Size = New System.Drawing.Size(48, 56)
@@ -126,7 +128,7 @@ Partial Class SetupDialogForm
         Me.ButtonTemp.AccessibleDescription = "this is where the files from the camera are stored (JPGor RAW) while trnasorming " &
     "to tiff and then passed on to the calling program as an imagearray. the files ar" &
     "e automatically deleted after each step"
-        Me.ButtonTemp.Location = New System.Drawing.Point(11, 304)
+        Me.ButtonTemp.Location = New System.Drawing.Point(12, 334)
         Me.ButtonTemp.Name = "ButtonTemp"
         Me.ButtonTemp.Size = New System.Drawing.Size(146, 23)
         Me.ButtonTemp.TabIndex = 6
@@ -140,7 +142,7 @@ Partial Class SetupDialogForm
         '
         Me.ButtonRaw.AccessibleDescription = "point to a valid DCRaw.exe.  try  http://www.centrostudiprogressofotografico.it/e" &
     "n/dcraw/"
-        Me.ButtonRaw.Location = New System.Drawing.Point(12, 368)
+        Me.ButtonRaw.Location = New System.Drawing.Point(13, 398)
         Me.ButtonRaw.Name = "ButtonRaw"
         Me.ButtonRaw.Size = New System.Drawing.Size(146, 23)
         Me.ButtonRaw.TabIndex = 8
@@ -156,7 +158,7 @@ Partial Class SetupDialogForm
         'Label1
         '
         Me.Label1.AutoSize = True
-        Me.Label1.Location = New System.Drawing.Point(9, 163)
+        Me.Label1.Location = New System.Drawing.Point(10, 205)
         Me.Label1.Margin = New System.Windows.Forms.Padding(4, 0, 4, 0)
         Me.Label1.Name = "Label1"
         Me.Label1.Size = New System.Drawing.Size(31, 17)
@@ -166,7 +168,7 @@ Partial Class SetupDialogForm
         'Label2
         '
         Me.Label2.AutoSize = True
-        Me.Label2.Location = New System.Drawing.Point(11, 213)
+        Me.Label2.Location = New System.Drawing.Point(12, 248)
         Me.Label2.Margin = New System.Windows.Forms.Padding(4, 0, 4, 0)
         Me.Label2.Name = "Label2"
         Me.Label2.Size = New System.Drawing.Size(99, 17)
@@ -176,7 +178,7 @@ Partial Class SetupDialogForm
         'Label5
         '
         Me.Label5.AutoSize = True
-        Me.Label5.Location = New System.Drawing.Point(11, 263)
+        Me.Label5.Location = New System.Drawing.Point(12, 291)
         Me.Label5.Margin = New System.Windows.Forms.Padding(4, 0, 4, 0)
         Me.Label5.Name = "Label5"
         Me.Label5.Size = New System.Drawing.Size(106, 17)
@@ -192,7 +194,7 @@ Partial Class SetupDialogForm
         'Label6
         '
         Me.Label6.AutoSize = True
-        Me.Label6.Location = New System.Drawing.Point(9, 119)
+        Me.Label6.Location = New System.Drawing.Point(9, 162)
         Me.Label6.Margin = New System.Windows.Forms.Padding(4, 0, 4, 0)
         Me.Label6.Name = "Label6"
         Me.Label6.Size = New System.Drawing.Size(75, 17)
@@ -203,8 +205,7 @@ Partial Class SetupDialogForm
         '
         Me.CBResolution.DataBindings.Add(New System.Windows.Forms.Binding("Text", Global.ASCOM.LumixG80.My.MySettings.Default, "Resolution", True, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged))
         Me.CBResolution.FormattingEnabled = True
-        Me.CBResolution.Items.AddRange(New Object() {"10M", "12M", "16M", "20M"})
-        Me.CBResolution.Location = New System.Drawing.Point(161, 116)
+        Me.CBResolution.Location = New System.Drawing.Point(162, 155)
         Me.CBResolution.Name = "CBResolution"
         Me.CBResolution.Size = New System.Drawing.Size(121, 24)
         Me.CBResolution.TabIndex = 2
@@ -213,7 +214,7 @@ Partial Class SetupDialogForm
         'TBTempPath
         '
         Me.TBTempPath.DataBindings.Add(New System.Windows.Forms.Binding("Text", Global.ASCOM.LumixG80.My.MySettings.Default, "TempPath", True, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged))
-        Me.TBTempPath.Location = New System.Drawing.Point(11, 333)
+        Me.TBTempPath.Location = New System.Drawing.Point(12, 363)
         Me.TBTempPath.Name = "TBTempPath"
         Me.TBTempPath.Size = New System.Drawing.Size(267, 22)
         Me.TBTempPath.TabIndex = 7
@@ -222,7 +223,7 @@ Partial Class SetupDialogForm
         'TBDCRawPath
         '
         Me.TBDCRawPath.DataBindings.Add(New System.Windows.Forms.Binding("Text", Global.ASCOM.LumixG80.My.MySettings.Default, "DCRawPath", True, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged))
-        Me.TBDCRawPath.Location = New System.Drawing.Point(11, 397)
+        Me.TBDCRawPath.Location = New System.Drawing.Point(12, 427)
         Me.TBDCRawPath.Name = "TBDCRawPath"
         Me.TBDCRawPath.Size = New System.Drawing.Size(267, 22)
         Me.TBDCRawPath.TabIndex = 9
@@ -233,7 +234,7 @@ Partial Class SetupDialogForm
         Me.CBReadoutMode.DataBindings.Add(New System.Windows.Forms.Binding("Text", Global.ASCOM.LumixG80.My.MySettings.Default, "TransferFormat", True, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged))
         Me.CBReadoutMode.FormattingEnabled = True
         Me.CBReadoutMode.Items.AddRange(New Object() {"JPG", "RAW", "Thumb"})
-        Me.CBReadoutMode.Location = New System.Drawing.Point(161, 260)
+        Me.CBReadoutMode.Location = New System.Drawing.Point(162, 287)
         Me.CBReadoutMode.Name = "CBReadoutMode"
         Me.CBReadoutMode.Size = New System.Drawing.Size(121, 24)
         Me.CBReadoutMode.TabIndex = 5
@@ -243,7 +244,7 @@ Partial Class SetupDialogForm
         '
         Me.CBShutterSpeed.DataBindings.Add(New System.Windows.Forms.Binding("Text", Global.ASCOM.LumixG80.My.MySettings.Default, "Speed", True, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged))
         Me.CBShutterSpeed.FormattingEnabled = True
-        Me.CBShutterSpeed.Location = New System.Drawing.Point(161, 210)
+        Me.CBShutterSpeed.Location = New System.Drawing.Point(162, 243)
         Me.CBShutterSpeed.Name = "CBShutterSpeed"
         Me.CBShutterSpeed.Size = New System.Drawing.Size(121, 24)
         Me.CBShutterSpeed.TabIndex = 4
@@ -253,7 +254,7 @@ Partial Class SetupDialogForm
         '
         Me.CBISO.DataBindings.Add(New System.Windows.Forms.Binding("Text", Global.ASCOM.LumixG80.My.MySettings.Default, "ISO", True, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged))
         Me.CBISO.FormattingEnabled = True
-        Me.CBISO.Location = New System.Drawing.Point(161, 160)
+        Me.CBISO.Location = New System.Drawing.Point(162, 199)
         Me.CBISO.Name = "CBISO"
         Me.CBISO.Size = New System.Drawing.Size(121, 24)
         Me.CBISO.TabIndex = 3
@@ -275,7 +276,7 @@ Partial Class SetupDialogForm
         Me.chkTrace.Checked = Global.ASCOM.LumixG80.My.MySettings.Default.TraceEnabled
         Me.chkTrace.CheckState = System.Windows.Forms.CheckState.Checked
         Me.chkTrace.DataBindings.Add(New System.Windows.Forms.Binding("Checked", Global.ASCOM.LumixG80.My.MySettings.Default, "TraceEnabled", True, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged))
-        Me.chkTrace.Location = New System.Drawing.Point(11, 442)
+        Me.chkTrace.Location = New System.Drawing.Point(12, 472)
         Me.chkTrace.Margin = New System.Windows.Forms.Padding(4)
         Me.chkTrace.Name = "chkTrace"
         Me.chkTrace.Size = New System.Drawing.Size(87, 21)
@@ -283,13 +284,32 @@ Partial Class SetupDialogForm
         Me.chkTrace.Text = "Trace on"
         Me.chkTrace.UseVisualStyleBackColor = True
         '
+        'Label7
+        '
+        Me.Label7.AutoSize = True
+        Me.Label7.Location = New System.Drawing.Point(9, 119)
+        Me.Label7.Name = "Label7"
+        Me.Label7.Size = New System.Drawing.Size(99, 17)
+        Me.Label7.TabIndex = 11
+        Me.Label7.Text = "Camera Model"
+        '
+        'Label8
+        '
+        Me.Label8.AutoSize = True
+        Me.Label8.Location = New System.Drawing.Point(159, 118)
+        Me.Label8.Name = "Label8"
+        Me.Label8.Size = New System.Drawing.Size(0, 17)
+        Me.Label8.TabIndex = 11
+        '
         'SetupDialogForm
         '
         Me.AcceptButton = Me.OK_Button
         Me.AutoScaleDimensions = New System.Drawing.SizeF(8.0!, 16.0!)
         Me.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font
         Me.CancelButton = Me.Cancel_Button
-        Me.ClientSize = New System.Drawing.Size(427, 505)
+        Me.ClientSize = New System.Drawing.Size(427, 519)
+        Me.Controls.Add(Me.Label8)
+        Me.Controls.Add(Me.Label7)
         Me.Controls.Add(Me.CBResolution)
         Me.Controls.Add(Me.TBTempPath)
         Me.Controls.Add(Me.TBDCRawPath)
@@ -345,4 +365,6 @@ Partial Class SetupDialogForm
     Friend WithEvents FolderBrowserDialog1 As FolderBrowserDialog
     Friend WithEvents CBResolution As ComboBox
     Private WithEvents Label6 As Label
+    Friend WithEvents Label7 As Label
+    Friend WithEvents Label8 As Label
 End Class

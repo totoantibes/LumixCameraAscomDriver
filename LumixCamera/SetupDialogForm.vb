@@ -2,7 +2,9 @@ Imports System.IO
 Imports System.Net
 Imports System.Data
 Imports System.Net.NetworkInformation
-
+Imports System.Xml
+Imports System.Xml.Linq
+Imports System.Linq
 
 <ComVisible(False)>
 Public Class SetupDialogForm
@@ -21,7 +23,7 @@ Public Class SetupDialogForm
             End If
 
         End If
-            Me.DialogResult = System.Windows.Forms.DialogResult.OK
+        Me.DialogResult = System.Windows.Forms.DialogResult.OK
         Me.Close()
     End Sub
 
@@ -47,6 +49,7 @@ Public Class SetupDialogForm
         InitializeComponent()
 
         ' Add any initialization after the InitializeComponent() call.
+        CBResolution.DataSource = New BindingSource(Camera.ResolutionTable, Nothing)
         CBISO.DataSource = New BindingSource(Camera.ISOTable, Nothing)
         For i = 0 To 55
             CBShutterSpeed.Items.Add(Camera.ShutterTable(i, 1))
@@ -175,8 +178,7 @@ Public Class SetupDialogForm
         Dim SendStatus As Integer = -1
         Dim statusCode As HttpStatusCode
         Dim ResponseText As String
-        Dim dsResponse As DataSet
-
+        Dim Capabilities As XElement
 
         Dim IPValues As New List(Of IPAddress)(GetAllDevicesOnLAN().Keys)
         CBCameraIPAddress.Items.Clear()
@@ -188,17 +190,31 @@ Public Class SetupDialogForm
 
         'trying to connect to the Lumix Cam
         For Each TryIPValue As IPAddress In IPValues
-            request = WebRequest.Create("http://" + TryIPValue.ToString + "/" + Camera.CURMENU)
+            request = WebRequest.Create("http://" + TryIPValue.ToString + "/" + Camera.CAPABILITY)
             request.Timeout = 2000
             Try
                 Dim myWebResponse = CType(request.GetResponse(), HttpWebResponse)
-                dsResponse = New DataSet()
-                dsResponse.ReadXml(myWebResponse.GetResponseStream())
+
 
                 If myWebResponse.StatusCode = HttpStatusCode.Accepted Or myWebResponse.StatusCode = 200 Then
                     SendStatus = 1 'message sent successfully
                     CBCameraIPAddress.SelectedItem = TryIPValue
                     Camera.IPAddress = TryIPValue.ToString
+                    '<contents_action_info date="20160602" version="1.0" model="G80">
+                    myStreamReader = New StreamReader(myWebResponse.GetResponseStream())
+                    Using (myStreamReader)
+                        ResponseText = myStreamReader.ReadToEnd
+                    End Using
+                    Capabilities = XElement.Parse(ResponseText)
+                    Dim Capability As IEnumerable(Of XElement) =
+                        From El In Capabilities.<contents_action_info>
+                        Select El
+                    For Each el As XElement In Capability
+                        Camera.MODEL = el.@model
+                        Label8.Text = el.@model
+                        CBResolution.SelectedItem = Camera.Models(Camera.MODEL)
+                    Next
+
                     Exit For
                 Else
                     SendStatus = 2 'message processed but not sent successfully
@@ -221,9 +237,8 @@ Public Class SetupDialogForm
                 End If
             End Try
         Next
-        'If SendStatus <> 1 Then
-        '    System.Windows.Forms.MessageBox.Show("No compatible lumix camera was discovered on the network. You can enter the known IP Address of your cam in the listbox")
-        'End If
+
+
 
     End Sub
 

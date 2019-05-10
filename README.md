@@ -57,6 +57,8 @@ To connect your PC to the camera:
 	13. AGAIN NO LIVEVIEW supported. this is beyond what ASCOM does. For Live view you can look at alternatives discussed here: https://www.personal-view.com/talks/discussion/6703/control-your-gh3-from-a-web-browser-now-with-video-/p1 the beauty is that they can work in parallel to the ASCOM driver since the Lumix camera is just a "Media Server".
 
 
+Video tutorial is available : https://www.youtube.com/watch?v=pKYlJDv_kuE
+
 The driver allows to set the speed, iso and format (RAW or RAW+JPG) of the camera transfers the image (Raw or JPG) on the PC and exposes the image array in RGB to the calling program. This will create a 16bit image regardless of what the transfer format waas.
 
 It relies on DCRaw to handle the Raw format, or the native VB.NET imaging for JPG
