@@ -13,14 +13,15 @@ Public Class SetupDialogForm
         If Camera.IPAddress IsNot Camera.IPAddressDefault Then
             Camera.SendLumixMessage(Camera.ISO + CBISO.SelectedItem)
             Camera.SendLumixMessage(Camera.SHUTTERSPEED + Camera.ShutterTable(CBShutterSpeed.SelectedIndex, 0))
+            Camera.SendLumixMessage(Camera.QUALITY + "raw_fine") 'that way we get all the format all the time. drawback is that the SD cards has now both RAW+JPG
 
-            If CBReadoutMode.SelectedItem.ToString.Equals("JPG") Or CBReadoutMode.SelectedItem.ToString.Equals("Thumb") Then
-                Camera.SendLumixMessage(Camera.QUALITY + "raw_fine")
-            End If
+            'If CBReadoutMode.SelectedItem.ToString.Equals("JPG") Or CBReadoutMode.SelectedItem.ToString.Equals("Thumb") Then
+            '    Camera.SendLumixMessage(Camera.QUALITY + "raw_fine")
+            'End If
 
-            If CBReadoutMode.SelectedItem.ToString.Equals("RAW") Then
-                Camera.SendLumixMessage(Camera.QUALITY + "raw")
-            End If
+            'If CBReadoutMode.SelectedItem.ToString.Equals("RAW") Then
+            '    Camera.SendLumixMessage(Camera.QUALITY + "raw")
+            'End If
 
         End If
         Me.DialogResult = System.Windows.Forms.DialogResult.OK

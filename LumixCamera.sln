@@ -42,6 +42,7 @@ Global
 		{D1747C8D-F0CC-4B20-A0E4-517EBA497FA4}.Release|x64.ActiveCfg = Release|x86
 		{D1747C8D-F0CC-4B20-A0E4-517EBA497FA4}.Release|x64.Build.0 = Release|x86
 		{D1747C8D-F0CC-4B20-A0E4-517EBA497FA4}.Release|x86.ActiveCfg = Release|x86
+		{D1747C8D-F0CC-4B20-A0E4-517EBA497FA4}.Release|x86.Build.0 = Release|x86
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -89,6 +89,7 @@ Imports ASCOM.DeviceInterface
 Imports ASCOM.Utilities
 Imports System.Threading
 Imports System.Runtime.Remoting.Messaging
+Imports System.Linq
 
 'Imports UPNPLib
 
@@ -161,45 +162,7 @@ Public Class Camera
     Private SETAPERTURE As String = "cam.cgi?mode=setsetting&type=focal&value="
     Public Shared QUALITY As String = "cam.cgi?mode=setsetting&type=quality&value="
 
-    'Focus (not used since we are assuming manual focus and/or mount on telescope)
-    'Private FOCUS As String = "cam.cgi?mode=camctrl&type=focus&value="
 
-    'Private NEARFAST As String = "wide-fast"
-
-    'Private NEAR As String = "wide-normal"
-
-    'Private FAR As String = "tele-normal"
-
-    'Private FARFAST As String = "tele-fast"
-
-    'Private INCREMENT As String = "%2F256"
-
-    'allowed external actions
-    'Public Enum Actions
-
-    '    SINGLESHOT
-
-    '    APERTURE
-
-    '    SHUTTER
-
-    '    FOCUS
-
-    '    ZOOM
-    'End Enum
-
-    'Public Enum Capabilities
-
-    '    LENS
-
-    '    CAMERA
-    'End Enum
-    ' Friend Shared comPortProfileName As String = "COM Port" 'Constants used for Profile persistence
-    'Friend Shared traceStateProfileName As String = "Trace Level"
-    'Friend Shared comPortDefault As String = "COM1"
-    'Friend Shared traceStateDefault As String = "False"
-
-    ' Friend Shared comPort As String ' Variables to hold the currrent device configuration
     Friend Shared traceState As Boolean
     Public Shared TransferFormat As String
     Friend Shared IPAddress As String
@@ -338,37 +301,38 @@ Public Class Camera
         ISOTableAL.Add("20000")
         ISOTableAL.Add("25600")
 
-        Models.Add("GX9", "20.3")
-        Models.Add("GF10", "16.0")
-        Models.Add("GH5S", "10.2")
-        Models.Add("G9", "20.3")
-        Models.Add("GH5", "20.3")
-        Models.Add("GF9", "16.0")
-        Models.Add("GX800", "16.0")
-        Models.Add("GX850", "16.0")
-        Models.Add("G80", "16.0")
-        Models.Add("G81", "16.0")
-        Models.Add("G85", "16.0")
-        Models.Add("GX80", "16.0")
-        Models.Add("GX85", "16.0")
-        Models.Add("G95", "20.3")
-        Models.Add("GF8", "16.0")
-        Models.Add("GX8", "20.3")
-        Models.Add("G7", "16.0")
-        Models.Add("GF7", "16.0")
-        Models.Add("GM5", "16.0")
-        Models.Add("GM1", "16.0")
-        Models.Add("GX7", "16.0")
-        Models.Add("GH4", "16.05")
-        Models.Add("GH3", "16.05")
-        Models.Add("GH2", "16.05")
-        Models.Add("GH1", "12.1")
-        Models.Add("G6", "16.05")
-        Models.Add("GF6", "16.0")
-        Models.Add("S1", "24.2")
-        Models.Add("S1R", "47.3")
+        If Models.Contains("GX9") = False Then
+            Models.Add("GX9", "20.3")
+            Models.Add("GF10", "16.0")
+            Models.Add("GH5S", "10.2")
+            Models.Add("G9", "20.3")
+            Models.Add("GH5", "20.3")
+            Models.Add("GF9", "16.0")
+            Models.Add("GX800", "16.0")
+            Models.Add("GX850", "16.0")
+            Models.Add("G80", "16.0")
+            Models.Add("G81", "16.0")
+            Models.Add("G85", "16.0")
+            Models.Add("GX80", "16.0")
+            Models.Add("GX85", "16.0")
+            Models.Add("G95", "20.3")
+            Models.Add("GF8", "16.0")
+            Models.Add("GX8", "20.3")
+            Models.Add("G7", "16.0")
+            Models.Add("GF7", "16.0")
+            Models.Add("GM5", "16.0")
+            Models.Add("GM1", "16.0")
+            Models.Add("GX7", "16.0")
+            Models.Add("GH4", "16.05")
+            Models.Add("GH3", "16.05")
+            Models.Add("GH2", "16.05")
+            Models.Add("GH1", "12.1")
+            Models.Add("G6", "16.05")
+            Models.Add("GF6", "16.0")
+            Models.Add("S1", "24.2")
+            Models.Add("S1R", "47.3")
 
-
+        End If
         '"10.2", "12.1", "16.0", "16.05", "20.0", "20.3", "24.2", "47.3"
 
         Resolutions(0)._resolution = "12.1"
@@ -420,6 +384,29 @@ Public Class Camera
         ResolutionsJPG(3)._X = 3680
         ResolutionsJPG(3)._Y = 2760
 
+
+        ResolutionsJPG(4)._resolution = "16.05"
+        ResolutionsJPG(4)._X = 4620
+        ResolutionsJPG(4)._Y = 3474
+
+        ResolutionsJPG(5)._resolution = "20.3"
+        ResolutionsJPG(5)._X = 5196
+        ResolutionsJPG(5)._Y = 3907
+
+        ResolutionsJPG(6)._resolution = "24.2"
+        ResolutionsJPG(6)._X = 6000
+        ResolutionsJPG(6)._Y = 4000
+
+        ResolutionsJPG(6)._resolution = "47.3"
+        ResolutionsJPG(6)._X = 8368
+        ResolutionsJPG(6)._Y = 5584
+
+
+
+
+
+
+
         ResolutionsThumb(0)._resolution = "12.1"
         ResolutionsThumb(0)._X = 1440
         ResolutionsThumb(0)._Y = 1080
@@ -436,7 +423,21 @@ Public Class Camera
         ResolutionsThumb(3)._X = 1440
         ResolutionsThumb(3)._Y = 1080
 
+        ResolutionsThumb(4)._resolution = "16.05"
+        ResolutionsThumb(4)._X = 1440
+        ResolutionsThumb(4)._Y = 1080
 
+        ResolutionsThumb(5)._resolution = "20.3"
+        ResolutionsThumb(5)._X = 1440
+        ResolutionsThumb(5)._Y = 1080
+
+        ResolutionsThumb(6)._resolution = "24.2"
+        ResolutionsThumb(6)._X = 1440
+        ResolutionsThumb(6)._Y = 1080
+
+        ResolutionsThumb(6)._resolution = "47.3"
+        ResolutionsThumb(6)._X = 1440
+        ResolutionsThumb(6)._Y = 1080
         'TODO: Implement your additional construction here
 
         TL.LogMessage("Camera", "Completed initialisation")
@@ -527,6 +528,11 @@ Public Class Camera
                 ReadoutMode = ROMAL.IndexOf(My.Settings.TransferFormat)
                 Gain = Math.Max(0, ISOTableAL.IndexOf(My.Settings.ISO))
                 SendLumixMessage(SHUTTERSPEED + CurrentSpeed)
+
+                If Camera.MODEL.Contains("S1") Then
+                    sensormmx = 36
+                    sensormmy = 24
+                End If
 
                 Dim index As UShort = Array.FindIndex(Resolutions, Function(f) f._resolution = My.Settings.Resolution)
 
@@ -619,6 +625,7 @@ Public Class Camera
 
     Private ccdWidth As Integer = 4612 ' Constants to define the ccd pixel dimenstions
     Private ccdHeight As Integer = 3468 ' (default for 16MP)
+
     Private sensormmx As Double = 17.3
     Private sensormmy As Double = 13
 
@@ -802,8 +809,15 @@ Public Class Camera
 
     Public ReadOnly Property ExposureMax() As Double Implements ICameraV2.ExposureMax
         Get
-            TL.LogMessage("ExposureMax Get", "120 secs  this is true for G80 only") 'this is true for G80 only
-            Return (120)
+            If Camera.MODEL = "G80" Then
+                TL.LogMessage("ExposureMax Get", "120 secs  this is true for G80 only") 'this is true for G80 only
+                Return (120)
+            Else
+                TL.LogMessage("ExposureMax Get", "1800 secs - 30 min in Bulb") '
+                Return (1800)
+
+            End If
+
             'Throw New ASCOM.PropertyNotImplementedException("ExposureMax", False)
         End Get
     End Property
@@ -1084,12 +1098,13 @@ Public Class Camera
         End Get
         Set(value As Short)
             TL.LogMessage("ReadoutMode Set", ROM(value).ToString)
-            Select Case value
-                Case 0, 2
-                    SendLumixMessage(QUALITY + "raw_fine")
-                Case 1
-                    SendLumixMessage(QUALITY + "raw")
-            End Select
+            SendLumixMessage(QUALITY + "raw_fine")
+            'Select Case value
+            '    Case 0, 2
+            '        SendLumixMessage(QUALITY + "raw_fine")
+            '    Case 1
+            '        SendLumixMessage(QUALITY + "raw")
+            'End Select
             CurrentROM = value
             'Throw New ASCOM.PropertyNotImplementedException("ReadoutMode", True)
         End Set
@@ -1278,15 +1293,11 @@ Public Class Camera
     End Function
 
 
-
-
     Private Sub ReadImageFromCamera()
         Dim Pictures As XmlDocument                     'the XML with all the results from the camea
-        Dim PictureList As XmlNodeList                  'the list of picture items extratec
-        Dim Picture As XmlNode                          'a singlepicture item
-        Dim Images(250) As String 'the array of the urls in the camera
-        Dim nRead(250) As Integer
-        Dim j = -1
+        Dim XPictures As XElement
+        Dim Images As String = "" 'the array of the urls in the camera
+        Dim nRead As Integer
         Dim SendStatus As Integer = -1
         Dim length As Integer = 0
         Dim buflen As Integer = 1024
@@ -1296,109 +1307,92 @@ Public Class Camera
             .Write16Bits = True,
             .InterpolateRggbAsFourColors = False,
         .DCRawPath = Camera.DCrawPath}
-        '.UseCameraWhiteBalance = True,
-        '.DocumentModeNoScaling = True,
-        '.InterpolateRggbAsFourColors = False,
-        '.UseEmbeddedColorMatrix = True,
-        '.Write16Bits = True,
-        '.DontAutomaticallyBrighten = True,
-        '
-        '.Colorspace = 1
-        '}
+
         Dim DCRawSpace As New NDCRaw.DCRaw(opts)
         cameraImageReady = False
         Pictures = New XmlDocument
         Dim PictureString As String
         PictureString = GetPix(1)
+        Dim LookupImgtag As String = ""
+
+        Select Case ReadoutMode
+            Case 0 'jpg
+                LookupImgtag = "CAM_RAW_JPG"
+            Case 1  'raw
+                LookupImgtag = "CAM_RAW"
+            Case 2  'thumb
+                LookupImgtag = "CAM_LRGTN"
+        End Select
+
         If PictureString IsNot "" Then
-            Pictures.LoadXml(GetPix(1)) '1 to get the last pic
+            XPictures = XElement.Parse(PictureString)
         Else
             Throw New Exception
         End If
-        PictureList = Pictures.LastChild.FirstChild.FirstChild.FirstChild.FirstChild.ChildNodes 'items
+
+        Dim items As IEnumerable(Of XElement) =
+        DirectCast(DirectCast(DirectCast(DirectCast(DirectCast(XPictures.FirstNode, System.[Xml].Linq.XContainer).FirstNode, System.[Xml].Linq.XContainer).FirstNode, System.[Xml].Linq.XContainer).FirstNode, System.[Xml].Linq.XContainer).FirstNode, System.[Xml].Linq.XContainer).Elements
+
+        For Each it In items
+            If it.HasAttributes Then
+                If it.FirstAttribute.Name = "protocolInfo" Then
+                    If it.@protocolInfo.EndsWith(LookupImgtag) Then
+                        Images = it.Value
+                        Exit For
+                    End If
+                End If
+            End If
+        Next
+
+
         SendLumixMessage(PLAYMODE)                'making sure the camera is in Playmode
         CurrentState = CameraStates.cameraDownload
         CurrentPercentCompleted = 0
-        For Each Picture In PictureList
-            '' look for the name of the file to DL ... either RAW or JPG based on the readoutmode
-            If ReadoutMode = 1 Then 'RAW
-                If Picture.ChildNodes(3).InnerText.Contains("RAW") Then   'RAW
-                    j = j + 1
-                    Images(j) = Picture.ChildNodes(3).InnerText  'RAW or JPG
-                Else
-                    Continue For
-                End If
 
-            Else 'JPG or Thumbnails
-                Dim lookuptag As String
-                Dim lookupNum As UShort
-                If ReadoutMode = 0 Then
-                    lookuptag = "DO" 'full JPG
-                    lookupNum = 3
-                Else
-                    lookuptag = "DL"  'large thumbnail
-                    If My.Settings.Resolution = "10M" Then              '''this really is a hack. truely i should look for the attribute tag CAM_LRGTN in the XML. 
-                        lookupNum = 6
-                    Else
-                        lookupNum = 5
-                    End If
+        nRead = 0
 
-
-                End If
-
-                    If Picture.ChildNodes(lookupNum).InnerText.Contains(".JPG") And Picture.ChildNodes(lookupNum).InnerText.Contains(lookuptag) Then
-                    j = j + 1
-                    Images(j) = Picture.ChildNodes(lookupNum).InnerText
-                Else
-                    Continue For
-                End If
-            End If
-            'Now we download the image 
-
-            nRead(j) = 0
-
-            Dim theResponse As HttpWebResponse
-            Dim theRequest As HttpWebRequest
-            Dim bytesread As Integer = 0
-            Do
-                theRequest = HttpWebRequest.Create(Images(j))
-                TL.LogMessage("reading stream ", Images(j) & " position " & nRead(j))
-                theRequest.KeepAlive = True
+        Dim theResponse As HttpWebResponse
+        Dim theRequest As HttpWebRequest
+        Dim bytesread As Integer = 0
+        Do
+            theRequest = HttpWebRequest.Create(Images)
+            TL.LogMessage("reading stream ", Images & " position " & nRead)
+            theRequest.KeepAlive = True
                 theRequest.ProtocolVersion = HttpVersion.Version11
                 theRequest.ServicePoint.ConnectionLimit = 1
-                If nRead(j) > 0 Then
-                    theRequest.AddRange(nRead(j))
-                    GetPix(1) 'if the file not found happened then this trick is to get the camera in a readmode again and making sure it remembers the filename
-                    TL.LogMessage("continuing the read where it stopped", Images(j) & " position " & nRead(j))
+            If nRead > 0 Then
+                theRequest.AddRange(nRead)
+                GetPix(1) 'if the file not found happened then this trick is to get the camera in a readmode again and making sure it remembers the filename
+                TL.LogMessage("continuing the read where it stopped", Images & " position " & nRead)
 
-                End If
+            End If
 
-                Try
-                    theResponse = theRequest.GetResponse()
+            Try
+                theResponse = theRequest.GetResponse()
 
-                Catch ex As Exception
+            Catch ex As Exception
 
-                    TL.LogMessage("error in reading stream ", Images(j) & " position " & nRead(j))
-                    Exit Do
+                TL.LogMessage("error in reading stream ", Images & " position " & nRead)
+                Exit Do
 
-                End Try
-                Dim writeStream As IO.FileStream
-                writeStream = New FileStream(TempPath & Images(j).Substring(Images(j).Length - 13), IO.FileMode.OpenOrCreate)
-                If nRead(j) > 0 Then
-                    writeStream.Position = nRead(j)
-                End If
+            End Try
+            Dim writeStream As IO.FileStream
+            writeStream = New FileStream(TempPath & Images.Substring(Images.Length - 13), IO.FileMode.OpenOrCreate)
+            If nRead > 0 Then
+                writeStream.Position = nRead
+            End If
 
-                TL.LogMessage("opening or creating  file", Images(j))
-                Try
+            TL.LogMessage("opening or creating  file", Images)
+            Try
                     Do
                         Dim readBytes(buflen - 1) As Byte
-                        CurrentPercentCompleted = Math.Min(100 * nRead(j) / 8000000, 100) 'assuming a jpg is not longer than 8MB
-                        bytesread = theResponse.GetResponseStream.Read(readBytes, 0, buflen)
+                    CurrentPercentCompleted = Math.Min(100 * nRead / 8000000, 100) 'assuming a jpg is not longer than 8MB
+                    bytesread = theResponse.GetResponseStream.Read(readBytes, 0, buflen)
 
-                        nRead(j) = nRead(j) + bytesread
-                        If bytesread = 0 Then
-                            TL.LogMessage("reached end of stream ", Images(j) & " position " & nRead(j))
-                            Exit Do
+                    nRead = nRead + bytesread
+                    If bytesread = 0 Then
+                        TL.LogMessage("reached end of stream ", Images & " position " & nRead)
+                        Exit Do
                         End If
                         writeStream.Write(readBytes, 0, bytesread)
                         writeStream.Flush()
@@ -1408,52 +1402,50 @@ Public Class Camera
                     writeStream.Close()
 
                 Catch e As System.IO.IOException
-                    TL.LogMessage("camera stopped streaming  ", Images(j) & " position  " & nRead(j))
-                    nRead(j) -= 8 * buflen
-                    theResponse.GetResponseStream.Close()
+                TL.LogMessage("camera stopped streaming  ", Images & " position  " & nRead)
+                nRead -= 8 * buflen
+                theResponse.GetResponseStream.Close()
                     writeStream.Flush()
                     writeStream.Close()
                 End Try
 
             Loop While bytesread > 0
 
-            If ReadoutMode = 1 Then
-                Try
-                    outputarray = DCRawSpace.Convert(TempPath & Images(j).Substring(Images(j).Length - 13))
-                    TiffFileName = outputarray.OutputFilename
-                    outputarray = Nothing
-                    My.Computer.FileSystem.DeleteFile(TempPath & Images(j).Substring(Images(j).Length - 13))
-                Catch e As Exception
-                    TL.LogMessage("Converting to tiff via DCRAW", Images(j) & " file not found")
-                End Try
-            Else
-                Try
-                    Dim myEncoder As System.Drawing.Imaging.Encoder
-                    Dim myImageCodecInfo As ImageCodecInfo
-                    Dim myEncoderParameter As EncoderParameter
-                    Dim myEncoderParameters As EncoderParameters
-                    Dim imagepath = TempPath & Images(j).Substring(Images(j).Length - 13)
-                    Dim jpg = Image.FromFile(imagepath)
-                    myImageCodecInfo = GetEncoderInfo("image/tiff")
+        If ReadoutMode = 1 Then 'RAW . needs dcraw conversion
+            Try
+                outputarray = DCRawSpace.Convert(TempPath & Images.Substring(Images.Length - 13))
+                TiffFileName = outputarray.OutputFilename
+                outputarray = Nothing
+                My.Computer.FileSystem.DeleteFile(TempPath & Images.Substring(Images.Length - 13))
+            Catch e As Exception
+                TL.LogMessage("Converting to tiff via DCRAW", Images & " file not found")
+            End Try
+        Else 'JPG image. VB can translate into TIFF natively
+            Try
+                Dim myEncoder As System.Drawing.Imaging.Encoder
+                Dim myImageCodecInfo As ImageCodecInfo
+                Dim myEncoderParameter As EncoderParameter
+                Dim myEncoderParameters As EncoderParameters
+                Dim imagepath = TempPath & Images.Substring(Images.Length - 13)
+                Dim jpg = Image.FromFile(imagepath)
+                myImageCodecInfo = GetEncoderInfo("image/tiff")
 
-                    TiffFileName = imagepath.Substring(0, imagepath.Length() - 3) + "tif"
-                    myEncoder = System.Drawing.Imaging.Encoder.ColorDepth
-                    myEncoderParameters = New EncoderParameters(1)
+                TiffFileName = imagepath.Substring(0, imagepath.Length() - 3) + "tif"
+                myEncoder = System.Drawing.Imaging.Encoder.ColorDepth
+                myEncoderParameters = New EncoderParameters(1)
 
-                    ' Save the image with a color depth of 24 bits per pixel.
-                    myEncoderParameter = New EncoderParameter(myEncoder, CType(24L, Int32))
-                    myEncoderParameters.Param(0) = myEncoderParameter
+                ' Save the image with a color depth of 24 bits per pixel.
+                myEncoderParameter = New EncoderParameter(myEncoder, CType(24L, Int32))
+                myEncoderParameters.Param(0) = myEncoderParameter
 
-                    jpg.Save(TiffFileName, myImageCodecInfo, myEncoderParameters)
-                    jpg.Dispose() 'cleaning up aftermyself and removing the jpg file once it is used and transformed into a tiff
-                    My.Computer.FileSystem.DeleteFile(imagepath)
+                jpg.Save(TiffFileName, myImageCodecInfo, myEncoderParameters)
+                jpg.Dispose() 'cleaning up aftermyself and removing the jpg file once it is used and transformed into a tiff
+                My.Computer.FileSystem.DeleteFile(imagepath)
 
-                Catch e As Exception
-                    TL.LogMessage("Converting to tiff via vb", Images(j) & " file not found")
-                End Try
-            End If
-
-        Next
+            Catch e As Exception
+                TL.LogMessage("Converting to tiff via vb", Images & " file not found")
+            End Try
+        End If
 
         CurrentState = CameraStates.cameraIdle
         cameraImageReady = True

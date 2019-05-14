@@ -203,8 +203,12 @@ Partial Class SetupDialogForm
         '
         'CBResolution
         '
+        Me.CBResolution.AutoCompleteMode = System.Windows.Forms.AutoCompleteMode.Suggest
+        Me.CBResolution.AutoCompleteSource = System.Windows.Forms.AutoCompleteSource.ListItems
         Me.CBResolution.DataBindings.Add(New System.Windows.Forms.Binding("Text", Global.ASCOM.LumixG80.My.MySettings.Default, "Resolution", True, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged))
+        Me.CBResolution.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList
         Me.CBResolution.FormattingEnabled = True
+        Me.CBResolution.ImeMode = System.Windows.Forms.ImeMode.Disable
         Me.CBResolution.Location = New System.Drawing.Point(162, 155)
         Me.CBResolution.Name = "CBResolution"
         Me.CBResolution.Size = New System.Drawing.Size(121, 24)
@@ -232,6 +236,7 @@ Partial Class SetupDialogForm
         'CBReadoutMode
         '
         Me.CBReadoutMode.DataBindings.Add(New System.Windows.Forms.Binding("Text", Global.ASCOM.LumixG80.My.MySettings.Default, "TransferFormat", True, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged))
+        Me.CBReadoutMode.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList
         Me.CBReadoutMode.FormattingEnabled = True
         Me.CBReadoutMode.Items.AddRange(New Object() {"JPG", "RAW", "Thumb"})
         Me.CBReadoutMode.Location = New System.Drawing.Point(162, 287)
@@ -243,6 +248,7 @@ Partial Class SetupDialogForm
         'CBShutterSpeed
         '
         Me.CBShutterSpeed.DataBindings.Add(New System.Windows.Forms.Binding("Text", Global.ASCOM.LumixG80.My.MySettings.Default, "Speed", True, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged))
+        Me.CBShutterSpeed.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList
         Me.CBShutterSpeed.FormattingEnabled = True
         Me.CBShutterSpeed.Location = New System.Drawing.Point(162, 243)
         Me.CBShutterSpeed.Name = "CBShutterSpeed"
@@ -253,6 +259,7 @@ Partial Class SetupDialogForm
         'CBISO
         '
         Me.CBISO.DataBindings.Add(New System.Windows.Forms.Binding("Text", Global.ASCOM.LumixG80.My.MySettings.Default, "ISO", True, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged))
+        Me.CBISO.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList
         Me.CBISO.FormattingEnabled = True
         Me.CBISO.Location = New System.Drawing.Point(162, 199)
         Me.CBISO.Name = "CBISO"
