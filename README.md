@@ -44,18 +44,18 @@ To connect your PC to the camera:
 	![](./readme_files/image013.png)
 	3. the driver will look for the Lumix camera on the local wifi network and connect to it (the camera should say "under remote control")
 	
-	![](./readme_files/image014.png)	
-	4.	IP address is populated by the driver after its discovery.
+	![](./readme_files/image014.png)  
+	4.	IP address is populated by the driver after its discovery.  
 	5.	Check that the correct resolution for your camera is discovered  
-	4.	set the ISO, Speed and TransferFormat (JPG, Thumb or Raw): read below for details
-	6.	Temp folder to store the files from the camera. 
-	8.	Path to the DCraw.exe file that is required to deal with the RAW file from the camera. This File is distributed with the setup and should be in C:\Program Files (x86)\Common Files\ASCOM\Camera
-	9.	hit ok.
+	4.	set the ISO, Speed and TransferFormat (JPG, Thumb or Raw): read below for details  
+	6.	Temp folder to store the files from the camera.   
+	8.	Path to the DCraw.exe file that is required to deal with the RAW file from the camera. This File is distributed with the setup and should be in C:\Program Files (x86)\Common Files\ASCOM\Camera  
+	9.	hit ok.  
 	10.	The Astro Software then gets data from the driver like the pixel pitch but does not get the temperature… in your Astro Software you can then set the Bulb seconds of the capture the gain etc. 
 	![](./readme_files/image007.png)
 	11. You can now shoot!
-	![](./readme_files/image017.png)
-	12. in APT you can then also (and more importantly)use the image received by the driver to perform platesolving.
+	![](./readme_files/image017.png)  
+	12. in APT you can then also (and more importantly)use the image received by the driver to perform platesolving.  
 	13. AGAIN NO LIVEVIEW supported. this is beyond what ASCOM does. For Live view you can look at alternatives discussed <a href= "https://www.personal-view.com/talks/discussion/6703/control-your-gh3-from-a-web-browser-now-with-video-/p1" target="_blank"> here </a>the beauty is that they can work in parallel to the ASCOM driver since the Lumix camera is just a "Media Server".
 
 
