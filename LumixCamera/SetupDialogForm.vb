@@ -201,7 +201,6 @@ Public Class SetupDialogForm
                     SendStatus = 1 'message sent successfully
                     CBCameraIPAddress.SelectedItem = TryIPValue
                     Camera.IPAddress = TryIPValue.ToString
-                    '<contents_action_info date="20160602" version="1.0" model="G80">
                     myStreamReader = New StreamReader(myWebResponse.GetResponseStream())
                     Using (myStreamReader)
                         ResponseText = myStreamReader.ReadToEnd
