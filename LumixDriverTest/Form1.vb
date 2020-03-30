@@ -82,7 +82,7 @@
 
     Private Sub Button1_Click(sender As Object, e As EventArgs) Handles GetImageArray.Click
         If Me.driver.ImageReady() Then
-            Dim currentimagearray(driver.CameraXSize, driver.CameraYSize) As Integer
+            Dim currentimagearray(Me.driver.CameraXSize, Me.driver.CameraYSize) As Integer
             currentimagearray = Me.driver.ImageArray()
         End If
     End Sub

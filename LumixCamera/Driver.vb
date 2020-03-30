@@ -1,6 +1,4 @@
 ' --------------------------------------------------------------------------------
-' TODO fill in this information for your driver, then remove this line!
-
 ' ASCOM Camera driver for LumixG80
 
 'This driver provides an interface to the Lumix http over wifi remote control protocol
@@ -121,6 +119,8 @@ Public Class Camera
 
     'list of html commads to talk to the lumix camera
     'Cam Info
+    Public Shared DEVICE As String = "cam.cgi??mode=setsetting&type=device_name&value=SM-G9350"
+    Public Shared SECURITY As String = "cam.cgi?mode=accctrl&type=req_acc&value=4D454930-0100-1000-8001-024500021C98&value2=SM-G903F"
     Public Shared STATE As String = "cam.cgi?mode=getstate"
     Public Shared CAPABILITY As String = "cam.cgi?mode=getinfo&type=capability"
     Public Shared ALLMENU As String = "cam.cgi?mode=getinfo&type=allmenu"
@@ -155,6 +155,8 @@ Public Class Camera
 
     'Cam Commands
     Public Shared NUMPIX As String = "cam.cgi?mode=get_content_info"
+    Public Shared GETSTATE As String = "cam.cgi?mode=getstate"
+
     Private RECMODE As String = "cam.cgi?mode=camcmd&value=recmode"
     Public Shared PLAYMODE As String = "cam.cgi?mode=camcmd&value=playmode"
     Private SHUTTERSTART As String = "cam.cgi?mode=camcmd&value=capture"
@@ -191,63 +193,125 @@ Public Class Camera
 
     Public Shared ISOTable = {"auto", "i_iso", "80", "100", "125", "160", "200", "250", "320", "400", "500", "640", "800", "1000", "1250", "1600", "2000", "2500", "3200", "4000", "5000", "6400", "8000", "10000", "12800", "16000", "20000", "25600"}
     Public Shared ShutterTable =
-        {{"3072/256", 4000},
-        {"2987/256", 3200},
-        {"2902/256", 2500},
-        {"2816/256", 2000},
-        {"2731/256", 1600},
-        {"2646/256", 1300},
-        {"2560/256", 1000},
-        {"2475/256", 800},
-        {"2390/256", 640},
-        {"2304/256", 500},
-        {"2219/256", 400},
-        {"2134/256", 320},
-        {"2048/256", 250},
-        {"1963/256", 200},
-        {"1878/256", 160},
-        {"1792/256", 125},
-        {"1707/256", 100},
-        {"1622/256", 80},
-        {"1536/256", 60},
-        {"1451/256", 50},
-        {"1366/256", 40},
-        {"1280/256", 30},
-        {"1195/256", 25},
-        {"1110/256", 20},
-        {"1024/256", 15},
-        {"939/256", 13},
-        {"854/256", 10},
-        {"768/256", 8},
-        {"683/256", 6},
-        {"598/256", 5},
-        {"512/256", 4},
-        {"427/256", 3.2},
-        {"342/256", 2.5},
-        {"256/256", 2},
-        {"171/256", 1.6},
-        {"86/256", 1.3},
-        {"0/256", 1},
-        {"-85/256", "1.3s"},
-        {"-170/256", "1.6s"},
-        {"-256/256", "2s"},
-        {"-341/256", "2.5s"},
-        {"-426/256", "3.2s"},
-        {"-512/256", "4s"},
-        {"-512/256", "5s"},
-        {"-682/256", "6s"},
-        {"-768/256", "8s"},
-        {"-853/256", "10s"},
-        {"-938/256", "13s"},
-        {"-1024/256", "15s"},
-        {"-1109/256", "20s"},
-        {"-1194/256", "25s"},
-        {"-1280/256", "30s"},
-        {"-1365/256", "40s"},
-        {"-1450/256", "50s"},
-        {"-1536/256", "60s"},
-        {"16384/256", "B"}
-}
+  {{"3328/256", "8000"},
+    {"3243/256", "6400"},
+    {"3158/256", "5000"},
+    {"3072/256", "4000"},
+    {"2987/256", "3200"},
+    {"2902/256", "2500"},
+    {"2816/256", "2000"},
+    {"2731/256", "1600"},
+    {"2646/256", "1300"},
+    {"2560/256", "1000"},
+    {"2475/256", "800"},
+    {"2390/256", "640"},
+    {"2304/256", "500"},
+    {"2219/256", "400"},
+    {"2134/256", "320"},
+    {"2048/256", "250"},
+    {"1963/256", "200"},
+    {"1878/256", "160"},
+    {"1792/256", "125"},
+    {"1707/256", "100"},
+    {"1622/256", "80"},
+    {"1536/256", "60"},
+    {"1451/256", "50"},
+    {"1366/256", "40"},
+    {"1280/256", "30"},
+    {"1195/256", "25"},
+    {"1110/256", "20"},
+    {"1024/256", "15"},
+    {"939/256", "13"},
+    {"854/256", "10"},
+    {"768/256", "8"},
+    {"683/256", "6"},
+    {"598/256", "5"},
+    {"512/256", "4"},
+    {"427/256", "3.2"},
+    {"342/256", "2.5"},
+    {"256/256", "2"},
+    {"171/256", "1.6"},
+    {"86/256", "1.3"},
+    {"0/256", "1"},
+    {"-85/256", "1.3s"},
+    {"-170/256", "1.6s"},
+    {"-256/256", "2s"},
+    {"-341/256", "2.5s"},
+    {"-426/256", "3.2s"},
+    {"-512/256", "4s"},
+    {"-512/256", "5s"},
+    {"-682/256", "6s"},
+    {"-768/256", "8s"},
+    {"-853/256", "10s"},
+    {"-938/256", "13s"},
+    {"-1024/256", "15s"},
+    {"-1109/256", "20s"},
+    {"-1194/256", "25s"},
+    {"-1280/256", "30s"},
+    {"-1365/256", "40s"},
+    {"-1450/256", "50s"},
+    {"-1536/256", "60s"},
+    {"16384/256", "B"}
+    }
+
+
+    '    {{"3072/256", 4000},
+    '        {"2987/256", 3200},
+    '        {"2902/256", 2500},
+    '        {"2816/256", 2000},
+    '        {"2731/256", 1600},
+    '        {"2646/256", 1300},
+    '        {"2560/256", 1000},
+    '        {"2475/256", 800},
+    '        {"2390/256", 640},
+    '        {"2304/256", 500},
+    '        {"2219/256", 400},
+    '        {"2134/256", 320},
+    '        {"2048/256", 250},
+    '        {"1963/256", 200},
+    '        {"1878/256", 160},
+    '        {"1792/256", 125},
+    '        {"1707/256", 100},
+    '        {"1622/256", 80},
+    '        {"1536/256", 60},
+    '        {"1451/256", 50},
+    '        {"1366/256", 40},
+    '        {"1280/256", 30},
+    '        {"1195/256", 25},
+    '        {"1110/256", 20},
+    '        {"1024/256", 15},
+    '        {"939/256", 13},
+    '        {"854/256", 10},
+    '        {"768/256", 8},
+    '        {"683/256", 6},
+    '        {"598/256", 5},
+    '        {"512/256", 4},
+    '        {"427/256", 3.2},
+    '        {"342/256", 2.5},
+    '        {"256/256", 2},
+    '        {"171/256", 1.6},
+    '        {"86/256", 1.3},
+    '        {"0/256", 1},
+    '        {"-85/256", "1.3s"},
+    '        {"-170/256", "1.6s"},
+    '        {"-256/256", "2s"},
+    '        {"-341/256", "2.5s"},
+    '        {"-426/256", "3.2s"},
+    '        {"-512/256", "4s"},
+    '        {"-512/256", "5s"},
+    '        {"-682/256", "6s"},
+    '        {"-768/256", "8s"},
+    '        {"-853/256", "10s"},
+    '        {"-938/256", "13s"},
+    '        {"-1024/256", "15s"},
+    '        {"-1109/256", "20s"},
+    '        {"-1194/256", "25s"},
+    '        {"-1280/256", "30s"},
+    '        {"-1365/256", "40s"},
+    '        {"-1450/256", "50s"},
+    '        {"-1536/256", "60s"},
+    '        {"16384/256", "B"}
+    '}
 
     Public Shared ResolutionTable = {"10.2", "12.1", "16.0", "16.05", "20.0", "20.3", "24.2", "47.3"}
 
@@ -363,9 +427,9 @@ Public Class Camera
         Resolutions(6)._X = 6000
         Resolutions(6)._Y = 4000
 
-        Resolutions(6)._resolution = "47.3"
-        Resolutions(6)._X = 8368
-        Resolutions(6)._Y = 5584
+        Resolutions(7)._resolution = "47.3"
+        Resolutions(7)._X = 8368
+        Resolutions(7)._Y = 5584
 
 
         ResolutionsJPG(0)._resolution = "12.1"
@@ -397,14 +461,9 @@ Public Class Camera
         ResolutionsJPG(6)._X = 6000
         ResolutionsJPG(6)._Y = 4000
 
-        ResolutionsJPG(6)._resolution = "47.3"
-        ResolutionsJPG(6)._X = 8368
-        ResolutionsJPG(6)._Y = 5584
-
-
-
-
-
+        ResolutionsJPG(7)._resolution = "47.3"
+        ResolutionsJPG(7)._X = 8368
+        ResolutionsJPG(7)._Y = 5584
 
 
         ResolutionsThumb(0)._resolution = "12.1"
@@ -435,9 +494,9 @@ Public Class Camera
         ResolutionsThumb(6)._X = 1440
         ResolutionsThumb(6)._Y = 1080
 
-        ResolutionsThumb(6)._resolution = "47.3"
-        ResolutionsThumb(6)._X = 1440
-        ResolutionsThumb(6)._Y = 1080
+        ResolutionsThumb(7)._resolution = "47.3"
+        ResolutionsThumb(7)._X = 1440
+        ResolutionsThumb(7)._Y = 1080
         'TODO: Implement your additional construction here
 
         TL.LogMessage("Camera", "Completed initialisation")
@@ -517,6 +576,8 @@ Public Class Camera
         End Get
         Set(value As Boolean)
             TL.LogMessage("Connected Set", value.ToString())
+            Dim d As MyDelegate2 = AddressOf Polling
+
             If value Then
                 connectedState = True
                 TL.LogMessage("Connected Set", "Connecting to IP Address " + IPAddress)
@@ -528,6 +589,10 @@ Public Class Camera
                 ReadoutMode = ROMAL.IndexOf(My.Settings.TransferFormat)
                 Gain = Math.Max(0, ISOTableAL.IndexOf(My.Settings.ISO))
                 SendLumixMessage(SHUTTERSPEED + CurrentSpeed)
+
+                '' SendLumixMessage(Camera.SECURITY)
+                ' SendLumixMessage(Camera.DEVICE)
+
 
                 If Camera.MODEL.Contains("S1") Then 'full frame bodies.
                     sensormmx = 36
@@ -554,7 +619,7 @@ Public Class Camera
 
                 cameraNumX = ccdWidth
                 cameraNumY = ccdHeight
-
+                d.BeginInvoke(True, Nothing, Nothing)
 
 
 
@@ -562,9 +627,37 @@ Public Class Camera
                 connectedState = False
                 TL.LogMessage("Connected Set", "Disconnecting from IP Address " + IPAddress)
                 ' TODO disconnect from the device
+                'd.EndInvoke(Nothing)
+                d.Invoke(False)
             End If
         End Set
     End Property
+
+
+
+    Private Delegate Function MyDelegate2(ByVal Bool As Boolean) As Boolean
+
+    Function Polling(Bool As Boolean) As Boolean
+
+        While Bool
+            System.Threading.Thread.Sleep(10000) ' Sleep for 10 sec  
+            SendLumixMessage(STATE)
+            ' System.Threading.Thread.Sleep(1000) ' Sleep for 1s after the capture so the camera can breath a bit. 
+        End While
+        Return True
+    End Function
+
+
+
+
+
+
+
+
+
+
+
+
 
     Public ReadOnly Property Description As String Implements ICameraV2.Description
         Get
@@ -579,7 +672,7 @@ Public Class Camera
         Get
             Dim m_version As Version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version
             ' TODO customise this driver description
-            Dim s_driverInfo As String = "Information about the driver itself. Version: " + m_version.Major.ToString() + "." + m_version.Minor.ToString()
+            Dim s_driverInfo As String = "Lumix Wifi Ascom driver. Version: " + m_version.Major.ToString() + "." + m_version.Minor.ToString()
             TL.LogMessage("DriverInfo Get", s_driverInfo)
             Return s_driverInfo
         End Get
@@ -707,8 +800,9 @@ Public Class Camera
 
     Public ReadOnly Property CCDTemperature() As Double Implements ICameraV2.CCDTemperature
         Get
-            TL.LogMessage("CCDTemperature Get", "Not implemented")
-            Throw New ASCOM.PropertyNotImplementedException("CCDTemperature", False)
+            'TL.LogMessage("CCDTemperature Get", "Not implemented")
+            'Throw New ASCOM.PropertyNotImplementedException("CCDTemperature", False)
+            Return 25
         End Get
     End Property
 
@@ -1314,6 +1408,11 @@ Public Class Camera
         Pictures = New XmlDocument
         Dim PictureString As String
         Dim LookupImgtag As String = ""
+        Dim tries As Int16 = 5
+        Dim temp As String = ""
+
+
+
 
         Select Case ReadoutMode
             Case 0 'jpg
@@ -1324,6 +1423,13 @@ Public Class Camera
                 LookupImgtag = "CAM_LRGTN"
         End Select
         Try
+            Do
+                temp = SendLumixMessage(PLAYMODE)   'making sure the camera is in Playmode
+                If temp.Contains("err") Then
+                    Thread.Sleep(1000)
+                End If
+                tries -= 1
+            Loop While (tries > 0 And temp.Contains("err"))
 
             PictureString = GetPix(1)
             If PictureString IsNot "" Then
@@ -1346,8 +1452,6 @@ Public Class Camera
                 End If
             Next
 
-            'Images = (From it In items.<res> Where it.@protocolInfo.EndsWith(LookupImgtag)).Value
-
 
             If Images = "" Then
                 Throw New ASCOM.DriverException
@@ -1362,6 +1466,9 @@ Public Class Camera
             Dim theResponse As HttpWebResponse
             Dim theRequest As HttpWebRequest
             Dim bytesread As Integer = 0
+            Dim start_time As DateTime = Now
+            Dim stop_time As DateTime
+            Dim elapsed_time As TimeSpan
             Do
                 theRequest = HttpWebRequest.Create(Images)
                 TL.LogMessage("reading stream ", Images & " position " & nRead)
@@ -1404,10 +1511,21 @@ Public Class Camera
                         End If
                         writeStream.Write(readBytes, 0, bytesread)
                         writeStream.Flush()
+                        stop_time = Now
+                        elapsed_time = stop_time.Subtract(start_time)
+                        If elapsed_time.TotalSeconds > 30 Then
+                            Throw New ASCOM.DriverException
+                        End If
+
                     Loop
                     theResponse.GetResponseStream.Close()
                     writeStream.Flush()
                     writeStream.Close()
+                    stop_time = Now
+                    elapsed_time = stop_time.Subtract(start_time)
+                    If elapsed_time.TotalSeconds > 30 Then
+                        Throw New ASCOM.DriverException
+                    End If
 
                 Catch e As System.IO.IOException
                     TL.LogMessage("camera stopped streaming  ", Images & " position  " & nRead)
@@ -1416,7 +1534,11 @@ Public Class Camera
                     writeStream.Flush()
                     writeStream.Close()
                 End Try
-
+                stop_time = Now
+                elapsed_time = stop_time.Subtract(start_time)
+                If elapsed_time.TotalSeconds > 30 Then
+                    Throw New ASCOM.DriverException
+                End If
             Loop While bytesread > 0
 
             If ReadoutMode = 1 Then 'RAW . needs dcraw conversion
@@ -1430,23 +1552,23 @@ Public Class Camera
                 End Try
             Else 'JPG image. VB can translate into TIFF natively
                 Try
-                    Dim myEncoder As System.Drawing.Imaging.Encoder
-                    Dim myImageCodecInfo As ImageCodecInfo
-                    Dim myEncoderParameter As EncoderParameter
-                    Dim myEncoderParameters As EncoderParameters
+                    'Dim myEncoder As System.Drawing.Imaging.Encoder
+                    'Dim myImageCodecInfo As ImageCodecInfo
+                    'Dim myEncoderParameter As EncoderParameter
+                    'Dim myEncoderParameters As EncoderParameters
                     Dim imagepath = TempPath & Images.Substring(Images.Length - 13)
                     Dim jpg = Image.FromFile(imagepath)
-                    myImageCodecInfo = GetEncoderInfo("image/tiff")
+                    'myImageCodecInfo = GetEncoderInfo("image/tiff")
 
                     TiffFileName = imagepath.Substring(0, imagepath.Length() - 3) + "tif"
-                    myEncoder = System.Drawing.Imaging.Encoder.ColorDepth
-                    myEncoderParameters = New EncoderParameters(1)
+                    'myEncoder = System.Drawing.Imaging.Encoder.ColorDepth
+                    'myEncoderParameters = New EncoderParameters(1)
 
                     ' Save the image with a color depth of 24 bits per pixel.
-                    myEncoderParameter = New EncoderParameter(myEncoder, CType(24L, Int32))
-                    myEncoderParameters.Param(0) = myEncoderParameter
+                    'myEncoderParameter = New EncoderParameter(myEncoder, CType(24L, Int32))
 
-                    jpg.Save(TiffFileName, myImageCodecInfo, myEncoderParameters)
+                    'jpg.Save(TiffFileName, myImageCodecInfo, myEncoderParameters)
+                    jpg.Save(TiffFileName, System.Drawing.Imaging.ImageFormat.Tiff)
                     jpg.Dispose() 'cleaning up aftermyself and removing the jpg file once it is used and transformed into a tiff
                     My.Computer.FileSystem.DeleteFile(imagepath)
 
@@ -1457,15 +1579,15 @@ Public Class Camera
 
         Catch ex As Exception
             TL.LogMessage("error in reading image", "error in reading image")
-            cameraImageReady = False
-            TL.LogMessage("ïmageready", "true")
+            cameraImageReady = True
+            TL.LogMessage("Imageready", "True")
             CurrentState = CameraStates.cameraIdle
             Exit Sub
         End Try
 
         CurrentState = CameraStates.cameraIdle
         cameraImageReady = True
-        TL.LogMessage("ïmageready", "true")
+        TL.LogMessage("Imageready", "true")
 
     End Sub
 
