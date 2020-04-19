@@ -652,8 +652,10 @@ Public Class Camera
     Private exposureStart As DateTime = DateTime.MinValue
     Private cameraLastExposureDuration As Double = 0.0
     Private cameraImageReady As Boolean = False
-    Private cameraImageArray As Integer(,,)
-    Private cameraImageArrayVariant As Object(,,)
+    'Private cameraImageArray As Integer(,,)
+    'Private cameraImageArrayVariant As Object(,,)
+    Private cameraImageArray As Integer(,)
+    Private cameraImageArrayVariant As Object(,)
 
     Public Sub AbortExposure() Implements ICameraV2.AbortExposure
         StopExposure()
@@ -909,6 +911,80 @@ Public Class Camera
         End Get
     End Property
 
+    'Public ReadOnly Property ImageArray() As Object Implements ICameraV2.ImageArray
+    '    Get
+    '        If (Not cameraImageReady) Then
+    '            TL.LogMessage("ImageArray Get", "Throwing InvalidOperationException because of a call to ImageArray before the first image has been taken!")
+    '            Throw New ASCOM.InvalidOperationException("Call to ImageArray before the first image has been taken!")
+    '        End If
+    '        Dim Tiffimagefile As IO.FileStream
+    '        Tiffimagefile = New FileStream(TiffFileName, IO.FileMode.Open)
+    '        ReDim cameraImageArray(cameraNumX - 1, cameraNumY - 1, 2) ' there are 3 channels: RVB. 
+
+    '        Dim decoder As New TiffBitmapDecoder(Tiffimagefile, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.Default)
+    '        Dim stride As Int32
+    '        Dim index As Int32
+    '        Dim bitmapSource As BitmapSource = decoder.Frames(0)
+    '        Dim bytesPerPixel As UShort
+    '        bytesPerPixel = bitmapSource.Format.BitsPerPixel / 8 '3 for JPG and 6 for RAW
+    '        stride = bitmapSource.PixelWidth * bytesPerPixel
+
+    '        If CurrentROM = 1 Then
+    '            Dim pixels(bitmapSource.PixelHeight * stride) As UShort
+    '            bitmapSource.CopyPixels(pixels, stride, 0)
+    '            For y = 0 To (cameraNumY - 1)
+    '                For x = 0 To (cameraNumX - 1)
+    '                    index = x * 3 + (y * stride / 2) 'because of the 16 bit instead of the 8 bit per channel this /2 is needed.
+    '                    cameraImageArray(x, cameraNumY - y - 1, 0) = pixels(index)
+    '                    cameraImageArray(x, cameraNumY - y - 1, 1) = pixels(index + 1)
+    '                    cameraImageArray(x, cameraNumY - y - 1, 2) = pixels(index + 2)
+
+    '                Next x
+    '            Next y
+    '        Else
+    '            Dim pixels(bitmapSource.PixelHeight * stride) As Byte
+    '            bitmapSource.CopyPixels(pixels, stride, 0)
+    '            For y = 0 To (cameraNumY - 1)
+    '                For x = 0 To (cameraNumX - 1)
+    '                    index = x * 3 + (y * stride)
+    '                    cameraImageArray(x, cameraNumY - y - 1, 0) = pixels(index + 2) 'R and B are reversed
+    '                    cameraImageArray(x, cameraNumY - y - 1, 1) = pixels(index + 1)
+    '                    cameraImageArray(x, cameraNumY - y - 1, 2) = pixels(index)
+
+    '                Next x
+    '            Next y
+
+    '        End If
+    '        Tiffimagefile.Dispose() 'cleaning up aftermyself and removing the Tiff file once it is used
+    '        My.Computer.FileSystem.DeleteFile(TiffFileName)
+
+    '        TL.LogMessage("ImageArray Get", "getting the Array")
+
+    '        Return cameraImageArray
+    '    End Get
+    'End Property
+
+    'Public ReadOnly Property ImageArrayVariant() As Object Implements ICameraV2.ImageArrayVariant
+    '    Get
+    '        If (Not cameraImageReady) Then
+    '            TL.LogMessage("ImageArrayVariant Get", "Throwing InvalidOperationException because of a call to ImageArrayVariant before the first image has been taken!")
+    '            Throw New ASCOM.InvalidOperationException("Call to ImageArrayVariant before the first image has been taken!")
+    '        End If
+
+    '        ReDim cameraImageArrayVariant(cameraNumX - 1, cameraNumY - 1, 2)
+    '        For i As Integer = 0 To cameraImageArray.GetLength(1) - 1
+    '            For j As Integer = 0 To cameraImageArray.GetLength(0) - 1
+    '                cameraImageArrayVariant(j, i, 0) = cameraImageArray(j, i, 0)
+    '                cameraImageArrayVariant(j, i, 1) = cameraImageArray(j, i, 1)
+    '                cameraImageArrayVariant(j, i, 2) = cameraImageArray(j, i, 2)
+    '            Next
+    '        Next
+    '        TL.LogMessage("ImageArray Variant Get", "getting the Array Variant")
+    '        Return cameraImageArrayVariant
+    '    End Get
+    'End Property
+
+
     Public ReadOnly Property ImageArray() As Object Implements ICameraV2.ImageArray
         Get
             If (Not cameraImageReady) Then
@@ -917,7 +993,7 @@ Public Class Camera
             End If
             Dim Tiffimagefile As IO.FileStream
             Tiffimagefile = New FileStream(TiffFileName, IO.FileMode.Open)
-            ReDim cameraImageArray(cameraNumX - 1, cameraNumY - 1, 2) ' there are 3 channels: RVB. 
+            ReDim cameraImageArray((cameraNumX - 1) * 2, (cameraNumY - 1) * 2) ' there are 3 channels: RVB. 
 
             Dim decoder As New TiffBitmapDecoder(Tiffimagefile, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.Default)
             Dim stride As Int32
@@ -933,21 +1009,26 @@ Public Class Camera
                 For y = 0 To (cameraNumY - 1)
                     For x = 0 To (cameraNumX - 1)
                         index = x * 3 + (y * stride / 2) 'because of the 16 bit instead of the 8 bit per channel this /2 is needed.
-                        cameraImageArray(x, cameraNumY - y - 1, 0) = pixels(index)
-                        cameraImageArray(x, cameraNumY - y - 1, 1) = pixels(index + 1)
-                        cameraImageArray(x, cameraNumY - y - 1, 2) = pixels(index + 2)
+                        'cameraImageArray(x, cameraNumY - y - 1, 0) = pixels(index)
+                        'cameraImageArray(x, cameraNumY - y - 1, 1) = pixels(index + 1)
+                        'cameraImageArray(x, cameraNumY - y - 1, 2) = pixels(index + 2)
+                        cameraImageArray(2 * x, 2 * y) = pixels(index + 2) 'R and B are reversed
+                        cameraImageArray(2 * x + 1, 2 * y + 1) = pixels(index + 2) 'R and B are reversed
+                        cameraImageArray(2 * x + 1, 2 * y) = pixels(index + 1)
+                        cameraImageArray(2 * x, 2 * y + 1) = pixels(index + 1)
 
                     Next x
                 Next y
             Else
                 Dim pixels(bitmapSource.PixelHeight * stride) As Byte
                 bitmapSource.CopyPixels(pixels, stride, 0)
-                For y = 0 To (cameraNumY - 1)
-                    For x = 0 To (cameraNumX - 1)
+                For y = 0 To (2 * cameraNumY - 1)
+                    For x = 0 To (2 * cameraNumX - 1)
                         index = x * 3 + (y * stride)
-                        cameraImageArray(x, cameraNumY - y - 1, 0) = pixels(index + 2) 'R and B are reversed
-                        cameraImageArray(x, cameraNumY - y - 1, 1) = pixels(index + 1)
-                        cameraImageArray(x, cameraNumY - y - 1, 2) = pixels(index)
+                        cameraImageArray(2 * x, 2 * y) = pixels(index + 2) 'R and B are reversed
+                        cameraImageArray(2 * x + 1, 2 * y + 1) = pixels(index + 2) 'R and B are reversed
+                        cameraImageArray(2 * x + 1, 2 * y) = pixels(index + 1)
+                        cameraImageArray(2 * x, 2 * y + 1) = pixels(index + 1)
 
                     Next x
                 Next y
@@ -969,18 +1050,19 @@ Public Class Camera
                 Throw New ASCOM.InvalidOperationException("Call to ImageArrayVariant before the first image has been taken!")
             End If
 
-            ReDim cameraImageArrayVariant(cameraNumX - 1, cameraNumY - 1, 2)
+            ReDim cameraImageArrayVariant(2 * cameraNumX - 1, 2 * cameraNumY - 1)
             For i As Integer = 0 To cameraImageArray.GetLength(1) - 1
                 For j As Integer = 0 To cameraImageArray.GetLength(0) - 1
-                    cameraImageArrayVariant(j, i, 0) = cameraImageArray(j, i, 0)
-                    cameraImageArrayVariant(j, i, 1) = cameraImageArray(j, i, 1)
-                    cameraImageArrayVariant(j, i, 2) = cameraImageArray(j, i, 2)
+                    cameraImageArrayVariant(j, i) = cameraImageArray(j, i)
+                    cameraImageArrayVariant(j, i) = cameraImageArray(j, i)
+                    cameraImageArrayVariant(j, i) = cameraImageArray(j, i)
                 Next
             Next
             TL.LogMessage("ImageArray Variant Get", "getting the Array Variant")
             Return cameraImageArrayVariant
         End Get
     End Property
+
 
     Public ReadOnly Property ImageReady() As Boolean Implements ICameraV2.ImageReady
         Get
@@ -1128,9 +1210,11 @@ Public Class Camera
 
     Public ReadOnly Property SensorType() As SensorType Implements ICameraV2.SensorType
         Get
-            TL.LogMessage("SensorType Get", "color")
+            TL.LogMessage("SensorType Get", "RGGB")
             'Throw New ASCOM.PropertyNotImplementedException("SensorType", False)
-            Return SensorType.Color
+            'Return SensorType.Color
+            Return SensorType.RGGB
+
         End Get
     End Property
 
