@@ -11,6 +11,8 @@ Public Class SetupDialogForm
 
     Private Sub OK_Button_Click(ByVal sender As System.Object, ByVal e As System.EventArgs) Handles OK_Button.Click ' OK button event handler
         If Camera.IPAddress IsNot Camera.IPAddressDefault Then
+            ' Camera.SendLumixMessage(Camera.SECURITY)
+            ' Camera.SendLumixMessage(Camera.DEVICE)
             Camera.SendLumixMessage(Camera.ISO + CBISO.SelectedItem)
             Camera.SendLumixMessage(Camera.SHUTTERSPEED + Camera.ShutterTable(CBShutterSpeed.SelectedIndex, 0))
             Camera.SendLumixMessage(Camera.QUALITY + "raw_fine") 'that way we get all the format all the time. drawback is that the SD cards has now both RAW+JPG
@@ -52,7 +54,7 @@ Public Class SetupDialogForm
         ' Add any initialization after the InitializeComponent() call.
         CBResolution.DataSource = New BindingSource(Camera.ResolutionTable, Nothing)
         CBISO.DataSource = New BindingSource(Camera.ISOTable, Nothing)
-        For i = 0 To 55
+        For i = 0 To 58
             CBShutterSpeed.Items.Add(Camera.ShutterTable(i, 1))
         Next
     End Sub
@@ -201,7 +203,6 @@ Public Class SetupDialogForm
                     SendStatus = 1 'message sent successfully
                     CBCameraIPAddress.SelectedItem = TryIPValue
                     Camera.IPAddress = TryIPValue.ToString
-                    '<contents_action_info date="20160602" version="1.0" model="G80">
                     myStreamReader = New StreamReader(myWebResponse.GetResponseStream())
                     Using (myStreamReader)
                         ResponseText = myStreamReader.ReadToEnd
