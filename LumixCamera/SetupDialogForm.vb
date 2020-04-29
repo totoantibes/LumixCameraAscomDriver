@@ -253,22 +253,10 @@ Public Class SetupDialogForm
         Camera.IPAddress = CBCameraIPAddress.SelectedItem.ToString
     End Sub
 
-
-
-
-    Private Sub Button2_Click(sender As Object, e As EventArgs) Handles ButtonRaw.Click
-        If OpenFileDialog1.ShowDialog = DialogResult.OK Then
-            TBDCRawPath.Text = Path.GetFullPath(OpenFileDialog1.FileName)
-        End If
-    End Sub
-
-
     Private Sub ButtonTemp_Click(sender As Object, e As EventArgs) Handles ButtonTemp.Click
         If FolderBrowserDialog1.ShowDialog = DialogResult.OK Then
             TBTempPath.Text = Path.GetFullPath(FolderBrowserDialog1.SelectedPath + "\")
         End If
     End Sub
-
-
 
 End Class

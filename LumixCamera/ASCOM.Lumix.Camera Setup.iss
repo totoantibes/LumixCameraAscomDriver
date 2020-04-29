@@ -4,63 +4,69 @@
 ;
 [Setup]
 AppID={{77b4d898-3116-40a5-91d4-4c41ff123d93}
-AppName=ASCOM ASCOM.LumixG80.Camera Camera Driver
-AppVerName=ASCOM ASCOM.LumixG80.Camera Camera Driver 0.1
-AppVersion=0.1
+AppName=ASCOM ASCOM.Lumix.Camera Camera Driver
+AppVerName=ASCOM ASCOM.Lumix.Camera Camera Driver 7.0
+AppVersion=7.0
 AppPublisher=robert hasson <robert_hasson@yahoo.com>
 AppPublisherURL=mailto:robert_hasson@yahoo.com
 AppSupportURL=http://tech.groups.yahoo.com/group/ASCOM-Talk/
 AppUpdatesURL=http://ascom-standards.org/
-VersionInfoVersion=1.0.0
-MinVersion=0,5.0.2195sp4
+VersionInfoVersion=7.0.0
+MinVersion=0,6.0
 DefaultDirName="{cf}\ASCOM\Camera"
 DisableDirPage=yes
 DisableProgramGroupPage=yes
 ;OutputDir="."
-OutputBaseFilename="ASCOM.LumixG80.Camera Setup32"
+OutputBaseFilename="ASCOM.Lumix.Camera Setup"
 Compression=lzma
 SolidCompression=yes
 ; Put there by Platform if Driver Installer Support selected
 WizardImageFile="C:\Program Files (x86)\ASCOM\Platform 6 Developer Components\Installer Generator\Resources\WizardImage.bmp"
 LicenseFile="C:\Program Files (x86)\ASCOM\Platform 6 Developer Components\Installer Generator\Resources\CreativeCommons.txt"
 ; {cf}\ASCOM\Uninstall\Camera folder created by Platform, always
-UninstallFilesDir="{cf}\ASCOM\Uninstall\Camera\ASCOM.LumixG80.Camera"
+UninstallFilesDir="{cf}\ASCOM\Uninstall\Camera\ASCOM.Lumix.Camera"
 OutputDir=Z:\
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Dirs]
-Name: "{cf}\ASCOM\Uninstall\Camera\ASCOM.LumixG80.Camera"
-; TODO: Add subfolders below {app} as needed (e.g. Name: "{app}\MyFolder")
-;C:\Users\robert.hasson\source\repos\LumixCamera\LumixCamera\bin\x86\Release
+Name: "{cf}\ASCOM\Uninstall\Camera\ASCOM.Lumix.Camera"
+; TODO: Add subfolders below {app} as needed (e.g. Name: "{app}\MyFolder")'
 [Files]
-Source: "C:\Users\robert.hasson\source\repos\LumixCamera\LumixCamera\bin\x86\Release\ASCOM.LumixG80.Camera.dll"; DestDir: "{app}"
+Source: "C:\Users\robert.hasson\source\repos\LumixCamera\LumixCamera\bin\Release\ASCOM.Lumix.Camera.dll"; DestDir: "{app}"
+Source: "C:\Users\robert.hasson\source\repos\LumixCamera\LumixCamera\bin\Release\Libraw.dll"; DestDir: "{app}"
+Source: "C:\Users\robert.hasson\source\repos\LumixCamera\LumixCamera\bin\Release\Libraw32.dll"; DestDir: "{app}"
 ; Require a read-me HTML to appear after installation, maybe driver's Help doc
 Source: "C:\Users\robert.hasson\source\repos\LumixCamera\readme.md"; DestDir: "{app}"; Flags: isreadme
 ; TODO: Add other files needed by your driver here (add subfolders above)
 Source: "C:\Users\robert.hasson\source\repos\LumixCamera\readme_files\*"; DestDir: "{app}\readme_files\"; 
-Source: "C:\Users\robert.hasson\source\repos\LumixCamera\packages\NDCRaw.0.5.2\lib\net461\dcraw.exe"; DestDir: "{app}"; 
-Source: "C:\Users\robert.hasson\source\repos\LumixCamera\packages\NDCRaw.0.5.2\lib\net461\NDCRaw.dll"; DestDir: "{app}"; 
-Source: "C:\Users\robert.hasson\source\repos\LumixCamera\packages\MedallionShell.1.5.1\lib\net45\MedallionShell.dll"; DestDir: "{app}"; 
+;Source: "C:\Users\robert.hasson\source\repos\LumixCamera\packages\NDCRaw.0.5.2\lib\net461\dcraw.exe"; DestDir: "{app}"; 
+;Source: "C:\Users\robert.hasson\source\repos\LumixCamera\packages\NDCRaw.0.5.2\lib\net461\NDCRaw.dll"; DestDir: "{app}"; 
+;Source: "C:\Users\robert.hasson\source\repos\LumixCamera\packages\MedallionShell.1.5.1\lib\net45\MedallionShell.dll"; DestDir: "{app}"; 
 
 
 ; Only if driver is .NET
 [Run]
 ; Only for .NET assembly/in-proc drivers
-Filename: "{dotnet4032}\regasm.exe"; Parameters: "/codebase ""{app}\ASCOM.LumixG80.Camera.dll"""; Flags: runhidden 32bit
-Filename: "{dotnet4032}\regasm.exe"; Parameters: "/codebase ""{app}\NDCRaw.dll""";Flags: runhidden 32bit
-Filename: "{dotnet4032}\regasm.exe"; Parameters: "/codebase ""{app}\MedallionShell.dll""";Flags: runhidden 32bit
+Filename: "{dotnet4032}\regasm.exe"; Parameters: "/codebase ""{app}\ASCOM.Lumix.Camera.dll"""; Flags: runhidden 32bit
+Filename: "{dotnet4064}\regasm.exe"; Parameters: "/codebase ""{app}\ASCOM.Lumix.Camera.dll"""; Flags: runhidden 64bit; Check: IsWin64
+Filename: "{dotnet4064}\regasm.exe"; Parameters: "/codebase ""{app}\libraw32.dll""";Flags: runhidden 32bit
+Filename: "{dotnet4064}\regasm.exe"; Parameters: "/codebase ""{app}\libraw.dll""";Flags: runhidden 64bit; Check: IsWin64
+;Filename: "{dotnet4064}\regasm.exe"; Parameters: "/codebase ""{app}\NDCRaw.dll""";Flags: runhidden 32bit
+;Filename: "{dotnet4064}\regasm.exe"; Parameters: "/codebase ""{app}\NDCRaw.dll""";Flags: runhidden 64bit; Check: IsWin64
+;Filename: "{dotnet4064}\regasm.exe"; Parameters: "/codebase ""{app}\MedallionShell.dll""";Flags: runhidden 32bit
+;Filename: "{dotnet4064}\regasm.exe"; Parameters: "/codebase ""{app}\MedallionShell.dll""";Flags: runhidden 64bit; Check: IsWin64
 
 
 ; Only if driver is .NET
 [UninstallRun]
 ; Only for .NET assembly/in-proc drivers
-Filename: "{dotnet4032}\regasm.exe"; Parameters: "-u ""{app}\ASCOM.LumixG80.Camera.dll"""; Flags: runhidden 32bit
+Filename: "{dotnet4032}\regasm.exe"; Parameters: "-u ""{app}\ASCOM.Lumix.Camera.dll"""; Flags: runhidden 32bit
 ; This helps to give a clean uninstall
-
-
-
+Filename: "{dotnet4064}\regasm.exe"; Parameters: "/codebase ""{app}\ASCOM.Lumix.Camera.dll"""; Flags: runhidden 64bit; Check: IsWin64
+Filename: "{dotnet4064}\regasm.exe"; Parameters: "-u ""{app}\ASCOM.Lumix.Camera.dll"""; Flags: runhidden 64bit; Check: IsWin64
+   
 
 [Code]
 const

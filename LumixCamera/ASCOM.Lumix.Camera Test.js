@@ -1,5 +1,5 @@
 //*** CHECK THIS ProgID ***
-var X = new ActiveXObject("ASCOM.ASCOM.LumixG80.Camera.Camera");
+var X = new ActiveXObject("ASCOM.ASCOM.Lumix.Camera.Camera");
 WScript.Echo("This is " + X.Name + ")");
 // You may want to uncomment this...
 // X.Connected = true;

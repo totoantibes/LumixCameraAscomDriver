@@ -8,10 +8,10 @@ Imports System.Runtime.InteropServices
 
 ' Review the values of the assembly attributes
 
-<Assembly: AssemblyTitle("ASCOM LumixG80.Camera")>
-<Assembly: AssemblyDescription("ASCOM Camera driver for LumixG80")>
+<Assembly: AssemblyTitle("ASCOM Lumix.Camera")>
+<Assembly: AssemblyDescription("ASCOM Camera driver for Lumix")>
 <Assembly: AssemblyCompany("ASCOM Initiative")>
-<Assembly: AssemblyProduct("ASCOM Camera driver for LumixG80")>
+<Assembly: AssemblyProduct("ASCOM Camera driver for Lumix")>
 <Assembly: AssemblyCopyright("Copyright © 2018, The ASCOM Intiative")>
 <Assembly: AssemblyTrademark("")>
 
@@ -30,5 +30,5 @@ Imports System.Runtime.InteropServices
 ' You can specify all the values or you can default the Build and Revision Numbers 
 ' by using the '*' as shown below:
 
-<Assembly: AssemblyVersion("6.4.0.0")>
-<Assembly: AssemblyFileVersion("6.4.0.0")>
+<Assembly: AssemblyVersion("7.0.0.0")>
+<Assembly: AssemblyFileVersion("7.0.0.0")>
