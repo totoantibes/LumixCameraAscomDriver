@@ -7,8 +7,8 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{71BB4DA7-4092-416D-89FE-97CD15207371}</ProjectGuid>
     <OutputType>Library</OutputType>
-    <RootNamespace>ASCOM.LumixG80</RootNamespace>
-    <AssemblyName>ASCOM.LumixG80.Camera</AssemblyName>
+    <RootNamespace>ASCOM.Lumix</RootNamespace>
+    <AssemblyName>ASCOM.Lumix.Camera</AssemblyName>
     <MyType>Windows</MyType>
     <FileUpgradeFlags>
     </FileUpgradeFlags>
@@ -129,12 +129,6 @@
     <Reference Include="ASCOM.Exceptions, Version=6.0.0.0, Culture=neutral, PublicKeyToken=565de7938946fba7, processorArchitecture=MSIL" />
     <Reference Include="ASCOM.SettingsProvider, Version=6.0.0.0, Culture=neutral, PublicKeyToken=565de7938946fba7, processorArchitecture=MSIL" />
     <Reference Include="ASCOM.Utilities, Version=6.0.0.0, Culture=neutral, PublicKeyToken=565de7938946fba7, processorArchitecture=MSIL" />
-    <Reference Include="MedallionShell, Version=1.5.1.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\MedallionShell.1.5.1\lib\net45\MedallionShell.dll</HintPath>
-    </Reference>
-    <Reference Include="NDCRaw">
-      <HintPath>..\packages\NDCRaw.0.5.2\lib\net461\NDCRaw.dll</HintPath>
-    </Reference>
     <Reference Include="PresentationCore" />
     <Reference Include="System" />
     <Reference Include="System.configuration" />
@@ -212,10 +206,15 @@
       <LastGenOutput>Settings.Designer.vb</LastGenOutput>
     </None>
     <None Include="packages.config" />
-    <None Include="ReadMe.md" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="ASCOM.png" />
+    <Content Include="libraw.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="libraw32.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <ItemGroup>
     <BootstrapperPackage Include="Microsoft.Net.Client.3.5">

@@ -1,5 +1,5 @@
 ' --------------------------------------------------------------------------------
-' ASCOM Camera driver for LumixG80
+' ASCOM Camera driver for Lumix
 
 'This driver provides an interface to the Lumix http over wifi remote control protocol
 'in order to present lumix cameras as ASCOM cameras and be used by astro photo SW like APT or Indi 
@@ -21,20 +21,18 @@
 '	c) Camera waits for an app to connect 
 '2) on the PC
 '	a) launch the Imaging SW (e.g. APT)
-'	b) chose the LumixG80 Ascom from the chooser window
+'	b) chose the Lumix Ascom from the chooser window
 '	c) click properties
 '	d) the driver will look for the Lumix camera on the local network and connect to it (the camera should say "under remote control")
 '	e) set the ISO, Speed and Transfer mode (JPG or Raw): read below for details
 '   f) select the correct resolution for your camera. I hope to make it "discoverable" soon)  
 '	g) Temp folder to store the file from the camera.
-'	h) Path to the DCraw.exe file that is required to deal with the RAW file from the camera. This File is distributed with the setup and should be in 
-'C:\Program Files (x86)\Common Files\ASCOM\Camera
-'	i) hit ok.
+''	h) hit ok.
 
 'The driver allows to set the speed,iso and format (RAW or RAW+JPG) of the camera  
 'transfers the image (Raw or JPG) on the PC and exposes the image array in RGB.
 
-'It relies on DCRaw to handle the Raw format, or the native VB.NET imaging for JPG
+'It relies on LibRaw to handle the Raw format, or the native VB.NET imaging for JPG
 'Images are then translated into Tiff and then passed to the image array.
 
 'RAW would be preferred but the file is substantially larger and therefore longer to tranfer.
@@ -64,7 +62,7 @@
 ' ---------------------------------------------------------------------------------
 '
 '
-' Your driver's ID is ASCOM.LumixG80.Camera
+' Your driver's ID is ASCOM.Lumix.Camera
 '
 ' The Guid attribute sets the CLSID for ASCOM.DeviceName.Camera
 ' The ClassInterface/None addribute prevents an empty interface called
@@ -88,6 +86,8 @@ Imports ASCOM.Utilities
 Imports System.Threading
 Imports System.Runtime.Remoting.Messaging
 Imports System.Linq
+Imports System.Runtime.InteropServices
+Imports System.Security.Cryptography.X509Certificates
 
 'Imports UPNPLib
 
@@ -95,9 +95,9 @@ Imports System.Linq
 <ClassInterface(ClassInterfaceType.None)>
 Public Class Camera
 
-    ' The Guid attribute sets the CLSID for ASCOM.LumixG80.Camera
+    ' The Guid attribute sets the CLSID for ASCOM.Lumix.Camera
     ' The ClassInterface/None addribute prevents an empty interface called
-    ' _LumixG80 from being created and used as the [default] interface
+    ' _Lumix from being created and used as the [default] interface
 
     ' TODO Replace the not implemented exceptions with code to implement the function or
     ' throw the appropriate ASCOM exception.
@@ -107,8 +107,8 @@ Public Class Camera
     '
     ' Driver ID and descriptive string that shows in the Chooser
     '
-    Public Const driverID As String = "ASCOM.LumixG80.Camera"
-    Public Const driverDescription As String = "LumixG80 Camera"
+    Public Const driverID As String = "ASCOM.Lumix.Camera"
+    Public Const driverDescription As String = "Lumix Camera"
 
 
     '----- Lumix constants ------
@@ -178,7 +178,7 @@ Public Class Camera
     Friend Shared DCrawPath As String '= "C:\Users\robert.hasson\source\repos\LumixCamera\packages\NDCRaw.0.5.2\lib\net461\dcraw-9.27-ms-64-bit.exe"
     Friend Shared TempPath As String '= "C:\Users\robert.hasson\Documents\XMLLumix\"
     Friend Shared IPAddressDefault As String = "localhost"
-    Public Shared outputarray As New NDCRaw.DCRawResult
+    '  Public Shared outputarray As New NDCRaw.DCRawResult
     Public ROM = {"JPG", "RAW", "Thumb"}
     Private JPEGPixelOffset As Int16 = 20
     Public ROMAL As New ArrayList
@@ -329,7 +329,7 @@ Public Class Camera
         astroUtilities = New AstroUtils 'Initialise new astro utiliites object
         IPAddressDefault = "localhost"
 
-        TL = New TraceLogger("", "LumixG80")
+        TL = New TraceLogger("", "Lumix")
         TL.Enabled = My.Settings.TraceEnabled 'traceState
         TL.LogMessage("Camera", "Starting initialisation")
 
@@ -583,17 +583,11 @@ Public Class Camera
                 TL.LogMessage("Connected Set", "Connecting to IP Address " + IPAddress)
                 ' TODO connect to the device
                 IPAddress = My.Settings.IPAddress
-                DCrawPath = My.Settings.DCRawPath
                 TempPath = My.Settings.TempPath
                 CurrentSpeed = My.Settings.Speed
                 ReadoutMode = ROMAL.IndexOf(My.Settings.TransferFormat)
                 Gain = Math.Max(0, ISOTableAL.IndexOf(My.Settings.ISO))
                 SendLumixMessage(SHUTTERSPEED + CurrentSpeed)
-
-                '' SendLumixMessage(Camera.SECURITY)
-                ' SendLumixMessage(Camera.DEVICE)
-
-
                 If Camera.MODEL.Contains("S1") Then 'full frame bodies.
                     sensormmx = 36
                     sensormmy = 24
@@ -695,7 +689,7 @@ Public Class Camera
 
     Public ReadOnly Property Name As String Implements ICameraV2.Name
         Get
-            Dim s_name As String = "LumixG80 Ascom Driver"
+            Dim s_name As String = "Lumix Ascom Driver"
             TL.LogMessage("Name Get", s_name)
             Return s_name
         End Get
@@ -745,8 +739,10 @@ Public Class Camera
     Private exposureStart As DateTime = DateTime.MinValue
     Private cameraLastExposureDuration As Double = 0.0
     Private cameraImageReady As Boolean = False
-    Private cameraImageArray As Integer(,,)
-    Private cameraImageArrayVariant As Object(,,)
+    'Private cameraImageArray As Integer(,,)
+    'Private cameraImageArrayVariant As Object(,,)
+    Private cameraImageArray As Integer(,)
+    Private cameraImageArrayVariant As Object(,)
 
     Public Sub AbortExposure() Implements ICameraV2.AbortExposure
         StopExposure()
@@ -1003,6 +999,80 @@ Public Class Camera
         End Get
     End Property
 
+    'Public ReadOnly Property ImageArray() As Object Implements ICameraV2.ImageArray
+    '    Get
+    '        If (Not cameraImageReady) Then
+    '            TL.LogMessage("ImageArray Get", "Throwing InvalidOperationException because of a call to ImageArray before the first image has been taken!")
+    '            Throw New ASCOM.InvalidOperationException("Call to ImageArray before the first image has been taken!")
+    '        End If
+    '        Dim Tiffimagefile As IO.FileStream
+    '        Tiffimagefile = New FileStream(TiffFileName, IO.FileMode.Open)
+    '        ReDim cameraImageArray(cameraNumX - 1, cameraNumY - 1, 2) ' there are 3 channels: RVB. 
+
+    '        Dim decoder As New TiffBitmapDecoder(Tiffimagefile, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.Default)
+    '        Dim stride As Int32
+    '        Dim index As Int32
+    '        Dim bitmapSource As BitmapSource = decoder.Frames(0)
+    '        Dim bytesPerPixel As UShort
+    '        bytesPerPixel = bitmapSource.Format.BitsPerPixel / 8 '3 for JPG and 6 for RAW
+    '        stride = bitmapSource.PixelWidth * bytesPerPixel
+
+    '        If CurrentROM = 1 Then
+    '            Dim pixels(bitmapSource.PixelHeight * stride) As UShort
+    '            bitmapSource.CopyPixels(pixels, stride, 0)
+    '            For y = 0 To (cameraNumY - 1)
+    '                For x = 0 To (cameraNumX - 1)
+    '                    index = x * 3 + (y * stride / 2) 'because of the 16 bit instead of the 8 bit per channel this /2 is needed.
+    '                    cameraImageArray(x, cameraNumY - y - 1, 0) = pixels(index)
+    '                    cameraImageArray(x, cameraNumY - y - 1, 1) = pixels(index + 1)
+    '                    cameraImageArray(x, cameraNumY - y - 1, 2) = pixels(index + 2)
+
+    '                Next x
+    '            Next y
+    '        Else
+    '            Dim pixels(bitmapSource.PixelHeight * stride) As Byte
+    '            bitmapSource.CopyPixels(pixels, stride, 0)
+    '            For y = 0 To (cameraNumY - 1)
+    '                For x = 0 To (cameraNumX - 1)
+    '                    index = x * 3 + (y * stride)
+    '                    cameraImageArray(x, cameraNumY - y - 1, 0) = pixels(index + 2) 'R and B are reversed
+    '                    cameraImageArray(x, cameraNumY - y - 1, 1) = pixels(index + 1)
+    '                    cameraImageArray(x, cameraNumY - y - 1, 2) = pixels(index)
+
+    '                Next x
+    '            Next y
+
+    '        End If
+    '        Tiffimagefile.Dispose() 'cleaning up aftermyself and removing the Tiff file once it is used
+    '        My.Computer.FileSystem.DeleteFile(TiffFileName)
+
+    '        TL.LogMessage("ImageArray Get", "getting the Array")
+
+    '        Return cameraImageArray
+    '    End Get
+    'End Property
+
+    'Public ReadOnly Property ImageArrayVariant() As Object Implements ICameraV2.ImageArrayVariant
+    '    Get
+    '        If (Not cameraImageReady) Then
+    '            TL.LogMessage("ImageArrayVariant Get", "Throwing InvalidOperationException because of a call to ImageArrayVariant before the first image has been taken!")
+    '            Throw New ASCOM.InvalidOperationException("Call to ImageArrayVariant before the first image has been taken!")
+    '        End If
+
+    '        ReDim cameraImageArrayVariant(cameraNumX - 1, cameraNumY - 1, 2)
+    '        For i As Integer = 0 To cameraImageArray.GetLength(1) - 1
+    '            For j As Integer = 0 To cameraImageArray.GetLength(0) - 1
+    '                cameraImageArrayVariant(j, i, 0) = cameraImageArray(j, i, 0)
+    '                cameraImageArrayVariant(j, i, 1) = cameraImageArray(j, i, 1)
+    '                cameraImageArrayVariant(j, i, 2) = cameraImageArray(j, i, 2)
+    '            Next
+    '        Next
+    '        TL.LogMessage("ImageArray Variant Get", "getting the Array Variant")
+    '        Return cameraImageArrayVariant
+    '    End Get
+    'End Property
+
+
     Public ReadOnly Property ImageArray() As Object Implements ICameraV2.ImageArray
         Get
             If (Not cameraImageReady) Then
@@ -1011,7 +1081,7 @@ Public Class Camera
             End If
             Dim Tiffimagefile As IO.FileStream
             Tiffimagefile = New FileStream(TiffFileName, IO.FileMode.Open)
-            ReDim cameraImageArray(cameraNumX - 1, cameraNumY - 1, 2) ' there are 3 channels: RVB. 
+            ReDim cameraImageArray(cameraNumX + 1, cameraNumY + 1) ' there are 3 channels: RVB. 
 
             Dim decoder As New TiffBitmapDecoder(Tiffimagefile, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.Default)
             Dim stride As Int32
@@ -1027,11 +1097,17 @@ Public Class Camera
                 For y = 0 To (cameraNumY - 1)
                     For x = 0 To (cameraNumX - 1)
                         index = x * 3 + (y * stride / 2) 'because of the 16 bit instead of the 8 bit per channel this /2 is needed.
-                        cameraImageArray(x, cameraNumY - y - 1, 0) = pixels(index)
-                        cameraImageArray(x, cameraNumY - y - 1, 1) = pixels(index + 1)
-                        cameraImageArray(x, cameraNumY - y - 1, 2) = pixels(index + 2)
-
+                        'cameraImageArray(x, cameraNumY - y - 1, 0) = pixels(index)
+                        'cameraImageArray(x, cameraNumY - y - 1, 1) = pixels(index + 1)
+                        'cameraImageArray(x, cameraNumY - y - 1, 2) = pixels(index + 2)
+                        cameraImageArray(x, y) = pixels(index) 'R and B are reversed
+                        cameraImageArray(x + 1, y + 1) = pixels(index + 2) 'R and B are reversed
+                        cameraImageArray(x + 1, y) = pixels(index + 1)
+                        cameraImageArray(x, y + 1) = pixels(index + 1)
+                        x += 1
                     Next x
+                    y += 1
+
                 Next y
             Else
                 Dim pixels(bitmapSource.PixelHeight * stride) As Byte
@@ -1039,11 +1115,14 @@ Public Class Camera
                 For y = 0 To (cameraNumY - 1)
                     For x = 0 To (cameraNumX - 1)
                         index = x * 3 + (y * stride)
-                        cameraImageArray(x, cameraNumY - y - 1, 0) = pixels(index + 2) 'R and B are reversed
-                        cameraImageArray(x, cameraNumY - y - 1, 1) = pixels(index + 1)
-                        cameraImageArray(x, cameraNumY - y - 1, 2) = pixels(index)
+                        cameraImageArray(x, y) = pixels(index + 2) * 256 'R 
+                        cameraImageArray(x + 1, y + 1) = pixels(index) * 256 'B 
+                        cameraImageArray(x + 1, y) = pixels(index + 1) * 256 'G
+                        cameraImageArray(x, y + 1) = pixels(index + 1) * 256 'G
+                        x += 1
 
                     Next x
+                    y += 1
                 Next y
 
             End If
@@ -1063,18 +1142,19 @@ Public Class Camera
                 Throw New ASCOM.InvalidOperationException("Call to ImageArrayVariant before the first image has been taken!")
             End If
 
-            ReDim cameraImageArrayVariant(cameraNumX - 1, cameraNumY - 1, 2)
+            ReDim cameraImageArrayVariant(2 * cameraNumX - 1, 2 * cameraNumY - 1)
             For i As Integer = 0 To cameraImageArray.GetLength(1) - 1
                 For j As Integer = 0 To cameraImageArray.GetLength(0) - 1
-                    cameraImageArrayVariant(j, i, 0) = cameraImageArray(j, i, 0)
-                    cameraImageArrayVariant(j, i, 1) = cameraImageArray(j, i, 1)
-                    cameraImageArrayVariant(j, i, 2) = cameraImageArray(j, i, 2)
+                    cameraImageArrayVariant(j, i) = cameraImageArray(j, i)
+                    cameraImageArrayVariant(j, i) = cameraImageArray(j, i)
+                    cameraImageArrayVariant(j, i) = cameraImageArray(j, i)
                 Next
             Next
             TL.LogMessage("ImageArray Variant Get", "getting the Array Variant")
             Return cameraImageArrayVariant
         End Get
     End Property
+
 
     Public ReadOnly Property ImageReady() As Boolean Implements ICameraV2.ImageReady
         Get
@@ -1222,9 +1302,11 @@ Public Class Camera
 
     Public ReadOnly Property SensorType() As SensorType Implements ICameraV2.SensorType
         Get
-            TL.LogMessage("SensorType Get", "color")
+            TL.LogMessage("SensorType Get", "RGGB")
             'Throw New ASCOM.PropertyNotImplementedException("SensorType", False)
-            Return SensorType.Color
+            'Return SensorType.Color
+            Return SensorType.RGGB
+
         End Get
     End Property
 
@@ -1387,6 +1469,67 @@ Public Class Camera
         Return True
     End Function
 
+    <DllImport("libraw.dll", EntryPoint:="libraw_init", ThrowOnUnmappableChar:=False, CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Function libraw_init64(ByVal flag As Integer) As <MarshalAs(UnmanagedType.SysUInt)> IntPtr
+
+    End Function
+
+    <DllImport("libraw.dll", EntryPoint:="libraw_open_file", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Function libraw_open_file64(ByVal libraw_data As IntPtr, ByVal filename As String) As <MarshalAs(UnmanagedType.U4)> Int32
+
+    End Function
+
+    <DllImport("libraw.dll", EntryPoint:="libraw_dcraw_ppm_tiff_writer", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Function libraw_dcraw_ppm_tiff_writer64(ByVal libraw_data As IntPtr, ByVal outfile As String) As <MarshalAs(UnmanagedType.U4)> Int32
+    End Function
+
+    <DllImport("libraw.dll", EntryPoint:="libraw_unpack", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Function libraw_unpack64(ByVal libraw_data As IntPtr) As <MarshalAs(UnmanagedType.U4)> Int32
+    End Function
+
+    <DllImport("libraw.dll", EntryPoint:="libraw_dcraw_process", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Function libraw_dcraw_process64(ByVal libraw_data As IntPtr) As <MarshalAs(UnmanagedType.U4)> Int32
+    End Function
+
+    <DllImport("libraw.dll", EntryPoint:="libraw_close", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Function libraw_close64(ByVal libraw_data As IntPtr) As <MarshalAs(UnmanagedType.U4)> Int32
+    End Function
+
+    <DllImport("libraw.dll", EntryPoint:="libraw_set_output_tif", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Sub libraw_set_output_tif64(ByVal libraw_data As IntPtr, ByVal value As Integer)
+    End Sub
+
+
+    <DllImport("libraw32.dll", EntryPoint:="libraw_init", ThrowOnUnmappableChar:=False, CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Function libraw_init32(ByVal flag As Integer) As <MarshalAs(UnmanagedType.SysUInt)> IntPtr
+
+    End Function
+
+    <DllImport("libraw32.dll", EntryPoint:="libraw_open_file", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Function libraw_open_file32(ByVal libraw_data As IntPtr, ByVal filename As String) As <MarshalAs(UnmanagedType.U4)> Int32
+    End Function
+
+    <DllImport("libraw32.dll", EntryPoint:="libraw_dcraw_ppm_tiff_writer", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Function libraw_dcraw_ppm_tiff_writer32(ByVal libraw_data As IntPtr, ByVal outfile As String) As <MarshalAs(UnmanagedType.U4)> Int32
+    End Function
+
+    <DllImport("libraw32.dll", EntryPoint:="libraw_unpack", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Function libraw_unpack32(ByVal libraw_data As IntPtr) As <MarshalAs(UnmanagedType.U4)> Int32
+    End Function
+
+    <DllImport("libraw32.dll", EntryPoint:="libraw_dcraw_process", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Function libraw_dcraw_process32(ByVal libraw_data As IntPtr) As <MarshalAs(UnmanagedType.U4)> Int32
+    End Function
+
+    <DllImport("libraw32.dll", EntryPoint:="libraw_close", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Function libraw_close32(ByVal libraw_data As IntPtr) As <MarshalAs(UnmanagedType.U4)> Int32
+    End Function
+
+
+    <DllImport("libraw32.dll", EntryPoint:="libraw_set_output_tif", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Sub libraw_set_output_tif32(ByVal libraw_data As IntPtr, ByVal value As Integer)
+    End Sub
+
 
     Private Sub ReadImageFromCamera()
         Dim Pictures As XmlDocument                     'the XML with all the results from the camea
@@ -1396,23 +1539,20 @@ Public Class Camera
         Dim SendStatus As Integer = -1
         Dim length As Integer = 0
         Dim buflen As Integer = 1024
-        Dim opts As New NDCRaw.DCRawOptions With {
-            .Format = NDCRaw.Format.Tiff,
-            .GammaCurve = New NDCRaw.CustomGammaCurve(2.222, 4.5),
-            .Write16Bits = True,
-            .InterpolateRggbAsFourColors = False,
-        .DCRawPath = Camera.DCrawPath}
+        'Dim opts As New NDCRaw.DCRawOptions With {
+        '    .Format = NDCRaw.Format.Tiff,
+        '    .GammaCurve = New NDCRaw.CustomGammaCurve(2.222, 4.5),
+        '    .Write16Bits = True,
+        '    .InterpolateRggbAsFourColors = False,
+        '.DCRawPath = Camera.DCrawPath}
 
-        Dim DCRawSpace As New NDCRaw.DCRaw(opts)
+        'Dim DCRawSpace As New NDCRaw.DCRaw(opts)
         cameraImageReady = False
         Pictures = New XmlDocument
         Dim PictureString As String
         Dim LookupImgtag As String = ""
         Dim tries As Int16 = 5
         Dim temp As String = ""
-
-
-
 
         Select Case ReadoutMode
             Case 0 'jpg
@@ -1543,9 +1683,31 @@ Public Class Camera
 
             If ReadoutMode = 1 Then 'RAW . needs dcraw conversion
                 Try
-                    outputarray = DCRawSpace.Convert(TempPath & Images.Substring(Images.Length - 13))
-                    TiffFileName = outputarray.OutputFilename
-                    outputarray = Nothing
+                    'outputarray = DCRawSpace.Convert(TempPath & Images.Substring(Images.Length - 13))
+                    ''TiffFileName = outputarray.OutputFilename
+                    TiffFileName = TempPath & Images.Substring(Images.Length - 13) & ".tif"
+                    'outputarray = Nothing
+                    'My.Computer.FileSystem.DeleteFile(TempPath & Images.Substring(Images.Length - 13))
+                    Dim libraw_data_t As IntPtr
+
+                    If (IntPtr.Size = 8) Then
+
+                        libraw_data_t = libraw_init64(1)
+                        libraw_open_file64(libraw_data_t, TempPath & Images.Substring(Images.Length - 13))
+                        libraw_unpack64(libraw_data_t)
+                        libraw_set_output_tif64(libraw_data_t, 1)
+                        libraw_dcraw_process64(libraw_data_t)
+                        libraw_dcraw_ppm_tiff_writer64(libraw_data_t, TiffFileName)
+                        libraw_close64(libraw_data_t)
+                    Else
+                        libraw_data_t = libraw_init32(1)
+                        libraw_open_file32(libraw_data_t, TempPath & Images.Substring(Images.Length - 13))
+                        libraw_unpack32(libraw_data_t)
+                        libraw_set_output_tif32(libraw_data_t, 1)
+                        libraw_dcraw_process32(libraw_data_t)
+                        libraw_dcraw_ppm_tiff_writer32(libraw_data_t, TiffFileName)
+                        libraw_close32(libraw_data_t)
+                    End If
                     My.Computer.FileSystem.DeleteFile(TempPath & Images.Substring(Images.Length - 13))
                 Catch e As Exception
                     TL.LogMessage("Converting to tiff via DCRAW", Images & " file not found")
