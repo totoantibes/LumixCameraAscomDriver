@@ -1081,7 +1081,7 @@ Public Class Camera
             End If
             Dim Tiffimagefile As IO.FileStream
             Tiffimagefile = New FileStream(TiffFileName, IO.FileMode.Open)
-            ReDim cameraImageArray(cameraNumX + 1, cameraNumY + 1) ' there are 3 channels: RVB. 
+            ReDim cameraImageArray(cameraNumX - 1, cameraNumY - 1) ' there are 3 channels: RVB. 
 
             Dim decoder As New TiffBitmapDecoder(Tiffimagefile, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.Default)
             Dim stride As Int32
@@ -1094,8 +1094,8 @@ Public Class Camera
             If CurrentROM = 1 Then
                 Dim pixels(bitmapSource.PixelHeight * stride) As UShort
                 bitmapSource.CopyPixels(pixels, stride, 0)
-                For y = 0 To (cameraNumY - 1)
-                    For x = 0 To (cameraNumX - 1)
+                For y = 0 To (cameraNumY - 2)
+                    For x = 0 To (cameraNumX - 2)
                         index = x * 3 + (y * stride / 2) 'because of the 16 bit instead of the 8 bit per channel this /2 is needed.
                         'cameraImageArray(x, cameraNumY - y - 1, 0) = pixels(index)
                         'cameraImageArray(x, cameraNumY - y - 1, 1) = pixels(index + 1)
@@ -1142,11 +1142,9 @@ Public Class Camera
                 Throw New ASCOM.InvalidOperationException("Call to ImageArrayVariant before the first image has been taken!")
             End If
 
-            ReDim cameraImageArrayVariant(2 * cameraNumX - 1, 2 * cameraNumY - 1)
-            For i As Integer = 0 To cameraImageArray.GetLength(1) - 1
-                For j As Integer = 0 To cameraImageArray.GetLength(0) - 1
-                    cameraImageArrayVariant(j, i) = cameraImageArray(j, i)
-                    cameraImageArrayVariant(j, i) = cameraImageArray(j, i)
+            ReDim cameraImageArrayVariant(cameraNumX - 1, cameraNumY - 1)
+            For i As Integer = 0 To cameraNumY - 1
+                For j As Integer = 0 To cameraNumX - 1
                     cameraImageArrayVariant(j, i) = cameraImageArray(j, i)
                 Next
             Next
