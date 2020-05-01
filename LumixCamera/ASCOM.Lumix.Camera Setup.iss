@@ -41,9 +41,6 @@ Source: "C:\Users\robert.hasson\source\repos\LumixCamera\LumixCamera\bin\Release
 Source: "C:\Users\robert.hasson\source\repos\LumixCamera\readme.md"; DestDir: "{app}"; Flags: isreadme
 ; TODO: Add other files needed by your driver here (add subfolders above)
 Source: "C:\Users\robert.hasson\source\repos\LumixCamera\readme_files\*"; DestDir: "{app}\readme_files\"; 
-;Source: "C:\Users\robert.hasson\source\repos\LumixCamera\packages\NDCRaw.0.5.2\lib\net461\dcraw.exe"; DestDir: "{app}"; 
-;Source: "C:\Users\robert.hasson\source\repos\LumixCamera\packages\NDCRaw.0.5.2\lib\net461\NDCRaw.dll"; DestDir: "{app}"; 
-;Source: "C:\Users\robert.hasson\source\repos\LumixCamera\packages\MedallionShell.1.5.1\lib\net45\MedallionShell.dll"; DestDir: "{app}"; 
 
 
 ; Only if driver is .NET

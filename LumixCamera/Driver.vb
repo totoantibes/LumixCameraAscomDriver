@@ -998,7 +998,11 @@ Public Class Camera
             Throw New ASCOM.PropertyNotImplementedException("HeatSinkTemperature", False)
         End Get
     End Property
-
+    ''' <summary>
+    ''' this was the code for multiplane imagearray
+    ''' </summary>
+    ''' <returns></returns>
+    '
     'Public ReadOnly Property ImageArray() As Object Implements ICameraV2.ImageArray
     '    Get
     '        If (Not cameraImageReady) Then
@@ -1088,9 +1092,8 @@ Public Class Camera
             Dim index As Int32
             Dim bitmapSource As BitmapSource = decoder.Frames(0)
             Dim bytesPerPixel As UShort
-            bytesPerPixel = bitmapSource.Format.BitsPerPixel / 8 '3 for JPG and 6 for RAW
+            bytesPerPixel = bitmapSource.Format.BitsPerPixel / 8
             stride = bitmapSource.PixelWidth * bytesPerPixel
-            'stride = bitmapSource.PixelWidth * ((bitmapSource.Format.BitsPerPixel + 7) / 8)
 
             If CurrentROM = 1 Then  'RAW
                 Dim pixels(bitmapSource.PixelHeight * stride * 2) As Byte
@@ -1098,10 +1101,10 @@ Public Class Camera
                 For y = 0 To (cameraNumY - 2)
                     For x = 0 To (cameraNumX - 2)
                         index = x * 3 + (y * stride)
-                        cameraImageArray(x, y) = pixels(index + 2) 'R and B are reversed
-                        cameraImageArray(x + 1, y + 1) = pixels(index) 'R and B are reversed
-                        cameraImageArray(x + 1, y) = pixels(index + 1)
-                        cameraImageArray(x, y + 1) = pixels(index + 1)
+                        cameraImageArray(x, y) = pixels(index + 2) * 256 'R and B are reversed
+                        cameraImageArray(x + 1, y + 1) = pixels(index) * 256 'R and B are reversed
+                        cameraImageArray(x + 1, y) = pixels(index + 1) * 256
+                        cameraImageArray(x, y + 1) = pixels(index + 1) * 256
                         x += 1
                     Next x
                     y += 1
@@ -1123,11 +1126,16 @@ Public Class Camera
                 Next y
 
             End If
-            Tiffimagefile.Dispose() 'cleaning up aftermyself and removing the Tiff file once it is used
-            My.Computer.FileSystem.DeleteFile(TiffFileName)
+
+            Try
+                Tiffimagefile.Dispose() 'cleaning up aftermyself and removing the Tiff file once it is used
+                My.Computer.FileSystem.DeleteFile(TiffFileName)
+            Catch e As Exception
+                TL.LogMessage("ImageArray Get", "error in deleting the imagefile")
+            End Try
 
             TL.LogMessage("ImageArray Get", "getting the Array")
-
+            cameraImageReady = False
             Return cameraImageArray
         End Get
     End Property
@@ -1534,14 +1542,7 @@ Public Class Camera
         Dim SendStatus As Integer = -1
         Dim length As Integer = 0
         Dim buflen As Integer = 1024
-        'Dim opts As New NDCRaw.DCRawOptions With {
-        '    .Format = NDCRaw.Format.Tiff,
-        '    .GammaCurve = New NDCRaw.CustomGammaCurve(2.222, 4.5),
-        '    .Write16Bits = True,
-        '    .InterpolateRggbAsFourColors = False,
-        '.DCRawPath = Camera.DCrawPath}
 
-        'Dim DCRawSpace As New NDCRaw.DCRaw(opts)
         cameraImageReady = False
         Pictures = New XmlDocument
         Dim PictureString As String

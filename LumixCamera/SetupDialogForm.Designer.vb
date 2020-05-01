@@ -189,6 +189,7 @@ Partial Class SetupDialogForm
         '
         'CBResolution
         '
+        Me.CBResolution.AllowDrop = True
         Me.CBResolution.AutoCompleteMode = System.Windows.Forms.AutoCompleteMode.Suggest
         Me.CBResolution.AutoCompleteSource = System.Windows.Forms.AutoCompleteSource.ListItems
         Me.CBResolution.DataBindings.Add(New System.Windows.Forms.Binding("Text", Global.ASCOM.Lumix.My.MySettings.Default, "Resolution", True, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged))
