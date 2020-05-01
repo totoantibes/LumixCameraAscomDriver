@@ -1090,30 +1090,27 @@ Public Class Camera
             Dim bytesPerPixel As UShort
             bytesPerPixel = bitmapSource.Format.BitsPerPixel / 8 '3 for JPG and 6 for RAW
             stride = bitmapSource.PixelWidth * bytesPerPixel
+            'stride = bitmapSource.PixelWidth * ((bitmapSource.Format.BitsPerPixel + 7) / 8)
 
-            If CurrentROM = 1 Then
-                Dim pixels(bitmapSource.PixelHeight * stride) As UShort
+            If CurrentROM = 1 Then  'RAW
+                Dim pixels(bitmapSource.PixelHeight * stride * 2) As Byte
                 bitmapSource.CopyPixels(pixels, stride, 0)
                 For y = 0 To (cameraNumY - 2)
                     For x = 0 To (cameraNumX - 2)
-                        index = x * 3 + (y * stride / 2) 'because of the 16 bit instead of the 8 bit per channel this /2 is needed.
-                        'cameraImageArray(x, cameraNumY - y - 1, 0) = pixels(index)
-                        'cameraImageArray(x, cameraNumY - y - 1, 1) = pixels(index + 1)
-                        'cameraImageArray(x, cameraNumY - y - 1, 2) = pixels(index + 2)
-                        cameraImageArray(x, y) = pixels(index) 'R and B are reversed
-                        cameraImageArray(x + 1, y + 1) = pixels(index + 2) 'R and B are reversed
+                        index = x * 3 + (y * stride)
+                        cameraImageArray(x, y) = pixels(index + 2) 'R and B are reversed
+                        cameraImageArray(x + 1, y + 1) = pixels(index) 'R and B are reversed
                         cameraImageArray(x + 1, y) = pixels(index + 1)
                         cameraImageArray(x, y + 1) = pixels(index + 1)
                         x += 1
                     Next x
                     y += 1
-
                 Next y
             Else
                 Dim pixels(bitmapSource.PixelHeight * stride) As Byte
                 bitmapSource.CopyPixels(pixels, stride, 0)
-                For y = 0 To (cameraNumY - 1)
-                    For x = 0 To (cameraNumX - 1)
+                For y = 0 To (cameraNumY - 2)
+                    For x = 0 To (cameraNumX - 2)
                         index = x * 3 + (y * stride)
                         cameraImageArray(x, y) = pixels(index + 2) * 256 'R 
                         cameraImageArray(x + 1, y + 1) = pixels(index) * 256 'B 
@@ -1679,19 +1676,18 @@ Public Class Camera
                 End If
             Loop While bytesread > 0
 
-            If ReadoutMode = 1 Then 'RAW . needs dcraw conversion
+            If ReadoutMode = 1 Then 'RAW . needs libraw conversion
                 Try
-                    'outputarray = DCRawSpace.Convert(TempPath & Images.Substring(Images.Length - 13))
-                    ''TiffFileName = outputarray.OutputFilename
-                    TiffFileName = TempPath & Images.Substring(Images.Length - 13) & ".tif"
-                    'outputarray = Nothing
-                    'My.Computer.FileSystem.DeleteFile(TempPath & Images.Substring(Images.Length - 13))
+
+                    Dim imagepath = TempPath & Images.Substring(Images.Length - 13)
+                    TiffFileName = imagepath.Substring(0, imagepath.Length() - 3) + "tif"
+
                     Dim libraw_data_t As IntPtr
 
                     If (IntPtr.Size = 8) Then
 
                         libraw_data_t = libraw_init64(1)
-                        libraw_open_file64(libraw_data_t, TempPath & Images.Substring(Images.Length - 13))
+                        libraw_open_file64(libraw_data_t, imagepath)
                         libraw_unpack64(libraw_data_t)
                         libraw_set_output_tif64(libraw_data_t, 1)
                         libraw_dcraw_process64(libraw_data_t)
@@ -1699,7 +1695,7 @@ Public Class Camera
                         libraw_close64(libraw_data_t)
                     Else
                         libraw_data_t = libraw_init32(1)
-                        libraw_open_file32(libraw_data_t, TempPath & Images.Substring(Images.Length - 13))
+                        libraw_open_file32(libraw_data_t, imagepath)
                         libraw_unpack32(libraw_data_t)
                         libraw_set_output_tif32(libraw_data_t, 1)
                         libraw_dcraw_process32(libraw_data_t)
@@ -1712,22 +1708,11 @@ Public Class Camera
                 End Try
             Else 'JPG image. VB can translate into TIFF natively
                 Try
-                    'Dim myEncoder As System.Drawing.Imaging.Encoder
-                    'Dim myImageCodecInfo As ImageCodecInfo
-                    'Dim myEncoderParameter As EncoderParameter
-                    'Dim myEncoderParameters As EncoderParameters
+
                     Dim imagepath = TempPath & Images.Substring(Images.Length - 13)
                     Dim jpg = Image.FromFile(imagepath)
-                    'myImageCodecInfo = GetEncoderInfo("image/tiff")
 
                     TiffFileName = imagepath.Substring(0, imagepath.Length() - 3) + "tif"
-                    'myEncoder = System.Drawing.Imaging.Encoder.ColorDepth
-                    'myEncoderParameters = New EncoderParameters(1)
-
-                    ' Save the image with a color depth of 24 bits per pixel.
-                    'myEncoderParameter = New EncoderParameter(myEncoder, CType(24L, Int32))
-
-                    'jpg.Save(TiffFileName, myImageCodecInfo, myEncoderParameters)
                     jpg.Save(TiffFileName, System.Drawing.Imaging.ImageFormat.Tiff)
                     jpg.Dispose() 'cleaning up aftermyself and removing the jpg file once it is used and transformed into a tiff
                     My.Computer.FileSystem.DeleteFile(imagepath)
