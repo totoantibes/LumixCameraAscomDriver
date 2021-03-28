@@ -369,7 +369,8 @@ Public Class Camera
             Models.Add("GX9", "20.3")
             Models.Add("GF10", "16.0")
             Models.Add("GH5S", "10.2")
-            Models.Add("G9", "20.3")
+            Models.Add("G9", "20.0")
+            Models.Add("G90", "20.0")
             Models.Add("GH5", "20.3")
             Models.Add("GF9", "16.0")
             Models.Add("GX800", "16.0")
@@ -379,7 +380,7 @@ Public Class Camera
             Models.Add("G85", "16.0")
             Models.Add("GX80", "16.0")
             Models.Add("GX85", "16.0")
-            Models.Add("G95", "20.3")
+            Models.Add("G95", "20.0")
             Models.Add("GF8", "16.0")
             Models.Add("GX8", "20.3")
             Models.Add("G7", "16.0")
@@ -394,7 +395,11 @@ Public Class Camera
             Models.Add("G6", "16.05")
             Models.Add("GF6", "16.0")
             Models.Add("S1", "24.2")
+            Models.Add("S5", "24.2")
             Models.Add("S1R", "47.3")
+            Models.Add("S1H", "24.2")
+            Models.Add("BGH1", "10.2")
+            Models.Add("G100", "20.3")
 
         End If
         '"10.2", "12.1", "16.0", "16.05", "20.0", "20.3", "24.2", "47.3"
@@ -424,12 +429,13 @@ Public Class Camera
         Resolutions(5)._Y = 3907
 
         Resolutions(6)._resolution = "24.2"
-        Resolutions(6)._X = 6000
-        Resolutions(6)._Y = 4000
+        Resolutions(6)._X = 6026
+        Resolutions(6)._Y = 4017
 
         Resolutions(7)._resolution = "47.3"
         Resolutions(7)._X = 8368
         Resolutions(7)._Y = 5584
+
 
 
         ResolutionsJPG(0)._resolution = "12.1"
@@ -441,8 +447,8 @@ Public Class Camera
         ResolutionsJPG(1)._Y = 3448  '3468
 
         ResolutionsJPG(2)._resolution = "20.0"
-        ResolutionsJPG(2)._X = 5180
-        ResolutionsJPG(2)._Y = 3890
+        ResolutionsJPG(2)._X = 5184
+        ResolutionsJPG(2)._Y = 3888
 
         ResolutionsJPG(3)._resolution = "10.2"
         ResolutionsJPG(3)._X = 3680
@@ -497,6 +503,8 @@ Public Class Camera
         ResolutionsThumb(7)._resolution = "47.3"
         ResolutionsThumb(7)._X = 1440
         ResolutionsThumb(7)._Y = 1080
+
+
         'TODO: Implement your additional construction here
 
         TL.LogMessage("Camera", "Completed initialisation")
@@ -717,7 +725,7 @@ Public Class Camera
     Private sensormmy As Double = 13
 
     Private pixelSize As Double = 1000 * sensormmx / ccdWidth '3.75  Constant for the pixel physical dimension
-    Private MFTresolutions = {{"10M", 3697, 2780}, {"12M", 4011, 3016}, {"16M", 4612, 3468}, {"20M", 5200, 3910}} '5200 x 3910 4011 x 3016
+    '     Private MFTresolutions = {{"10M", 3697, 2780}, {"12M", 4011, 3016}, {"16M", 4612, 3468}, {"20M", 5200, 3910}} '5200 x 3910 4011 x 3016
 
 
     Private Structure MFTResolution

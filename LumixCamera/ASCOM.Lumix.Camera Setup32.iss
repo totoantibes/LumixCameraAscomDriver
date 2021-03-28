@@ -5,13 +5,13 @@
 [Setup]
 AppID={{77b4d898-3116-40a5-91d4-4c41ff123d93}
 AppName=ASCOM ASCOM.Lumix.Camera Camera Driver
-AppVerName=ASCOM ASCOM.Lumix.Camera Camera Driver 7.0.1
-AppVersion=7.0.1
+AppVerName=ASCOM ASCOM.Lumix.Camera Camera Driver 7.0.2
+AppVersion=7.0.2
 AppPublisher=robert hasson <robert_hasson@yahoo.com>
 AppPublisherURL=mailto:robert_hasson@yahoo.com
 AppSupportURL=http://tech.groups.yahoo.com/group/ASCOM-Talk/
 AppUpdatesURL=http://ascom-standards.org/
-VersionInfoVersion=7.0.1
+VersionInfoVersion=7.0.2
 MinVersion=0,6.0
 DefaultDirName="{cf}\ASCOM\Camera"
 DisableDirPage=yes
@@ -25,7 +25,7 @@ WizardImageFile="C:\Program Files (x86)\ASCOM\Platform 6 Developer Components\In
 LicenseFile="C:\Program Files (x86)\ASCOM\Platform 6 Developer Components\Installer Generator\Resources\CreativeCommons.txt"
 ; {cf}\ASCOM\Uninstall\Camera folder created by Platform, always
 UninstallFilesDir="{cf}\ASCOM\Uninstall\Camera\ASCOM.Lumix.Camera"
-OutputDir=Z:\
+OutputDir=Y:\
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -35,13 +35,13 @@ Name: "{cf}\ASCOM\Uninstall\Camera\ASCOM.Lumix.Camera"
 ; TODO: Add subfolders below {app} as needed (e.g. Name: "{app}\MyFolder")
 ;C:\Users\robert.hasson\source\repos\LumixCamera\LumixCamera\bin\x86\Release
 [Files]
-Source: "C:\Users\robert.hasson\source\repos\LumixCamera\LumixCamera\bin\x86\Release\ASCOM.Lumix.Camera.dll"; DestDir: "{app}"
-Source: "C:\Users\robert.hasson\source\repos\LumixCamera\LumixCamera\bin\Release\Libraw.dll"; DestDir: "{app}"
-Source: "C:\Users\robert.hasson\source\repos\LumixCamera\LumixCamera\bin\Release\Libraw32.dll"; DestDir: "{app}"
+Source: "C:\Users\rober\Source\Repos\totoantibes\LumixCameraAscomDriver\LumixCamera\bin\x86\Release\ASCOM.Lumix.Camera.dll"; DestDir: "{app}"
+Source: "C:\Users\rober\Source\Repos\totoantibes\LumixCameraAscomDriver\LumixCamera\bin\x86\Release\Libraw.dll"; DestDir: "{app}"
+Source: "C:\Users\rober\Source\Repos\totoantibes\LumixCameraAscomDriver\LumixCamera\bin\x86\Release\Libraw32.dll"; DestDir: "{app}"
 ; Require a read-me HTML to appear after installation, maybe driver's Help doc
-Source: "C:\Users\robert.hasson\source\repos\LumixCamera\readme.md"; DestDir: "{app}"; Flags: isreadme
+Source: "C:\Users\rober\Source\Repos\totoantibes\LumixCameraAscomDriver\readme.md"; DestDir: "{app}"; Flags: isreadme
 ; TODO: Add other files needed by your driver here (add subfolders above)
-Source: "C:\Users\robert.hasson\source\repos\LumixCamera\readme_files\*"; DestDir: "{app}\readme_files\"; 
+Source: "C:\Users\rober\Source\Repos\totoantibes\LumixCameraAscomDriver\readme_files\*"; DestDir: "{app}\readme_files\"; 
 
 
 ; Only if driver is .NET
