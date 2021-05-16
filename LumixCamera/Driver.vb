@@ -456,8 +456,8 @@ Public Class Camera
 
 
         ResolutionsJPG(4)._resolution = "16.05"
-        ResolutionsJPG(4)._X = 4620
-        ResolutionsJPG(4)._Y = 3474
+        ResolutionsJPG(4)._X = 4608
+        ResolutionsJPG(4)._Y = 3456
 
         ResolutionsJPG(5)._resolution = "20.3"
         ResolutionsJPG(5)._X = 5196

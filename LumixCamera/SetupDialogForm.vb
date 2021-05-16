@@ -182,6 +182,7 @@ Public Class SetupDialogForm
         Dim statusCode As HttpStatusCode
         Dim ResponseText As String
         Dim Capabilities As XElement
+        Dim CameraFound As Boolean = False
 
         Dim IPValues As New List(Of IPAddress)(GetAllDevicesOnLAN().Keys)
         CBCameraIPAddress.Items.Clear()
@@ -215,6 +216,7 @@ Public Class SetupDialogForm
                         Camera.MODEL = el.@model
                         Label8.Text = el.@model
                         CBResolution.SelectedItem = Camera.Models(Camera.MODEL)
+                        CameraFound = True
                     Next
 
                     Exit For
@@ -240,8 +242,9 @@ Public Class SetupDialogForm
             End Try
         Next
 
-
-
+        If (Not CameraFound) Then
+            MsgBox("Camera was not found on the network. Make sure the camera is on and connected to your PC network", MsgBoxStyle.Information)
+        End If
     End Sub
 
 

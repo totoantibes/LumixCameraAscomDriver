@@ -5,13 +5,13 @@
 [Setup]
 AppID={{77b4d898-3116-40a5-91d4-4c41ff123d93}
 AppName=ASCOM ASCOM.Lumix.Camera Camera Driver
-AppVerName=ASCOM ASCOM.Lumix.Camera Camera Driver 7.0.2
-AppVersion=7.0.1
+AppVerName=ASCOM ASCOM.Lumix.Camera Camera Driver 7.0.3
+AppVersion=7.0.3
 AppPublisher=robert hasson <robert_hasson@yahoo.com>
 AppPublisherURL=mailto:robert_hasson@yahoo.com
 AppSupportURL=http://tech.groups.yahoo.com/group/ASCOM-Talk/
 AppUpdatesURL=http://ascom-standards.org/
-VersionInfoVersion=7.0.2
+VersionInfoVersion=7.0.3
 MinVersion=0,6.0
 DefaultDirName="{cf}\ASCOM\Camera"
 DisableDirPage=yes
@@ -25,7 +25,7 @@ WizardImageFile="C:\Program Files (x86)\ASCOM\Platform 6 Developer Components\In
 LicenseFile="C:\Program Files (x86)\ASCOM\Platform 6 Developer Components\Installer Generator\Resources\CreativeCommons.txt"
 ; {cf}\ASCOM\Uninstall\Camera folder created by Platform, always
 UninstallFilesDir="{cf}\ASCOM\Uninstall\Camera\ASCOM.Lumix.Camera"
-OutputDir=Y:\
+OutputDir="C:\Users\rober\source\repos\totoantibes\LumixCameraAscomDriver\"
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -50,10 +50,6 @@ Filename: "{dotnet4032}\regasm.exe"; Parameters: "/codebase ""{app}\ASCOM.Lumix.
 Filename: "{dotnet4064}\regasm.exe"; Parameters: "/codebase ""{app}\ASCOM.Lumix.Camera.dll"""; Flags: runhidden 64bit; Check: IsWin64
 Filename: "{dotnet4064}\regasm.exe"; Parameters: "/codebase ""{app}\libraw32.dll""";Flags: runhidden 32bit
 Filename: "{dotnet4064}\regasm.exe"; Parameters: "/codebase ""{app}\libraw.dll""";Flags: runhidden 64bit; Check: IsWin64
-;Filename: "{dotnet4064}\regasm.exe"; Parameters: "/codebase ""{app}\NDCRaw.dll""";Flags: runhidden 32bit
-;Filename: "{dotnet4064}\regasm.exe"; Parameters: "/codebase ""{app}\NDCRaw.dll""";Flags: runhidden 64bit; Check: IsWin64
-;Filename: "{dotnet4064}\regasm.exe"; Parameters: "/codebase ""{app}\MedallionShell.dll""";Flags: runhidden 32bit
-;Filename: "{dotnet4064}\regasm.exe"; Parameters: "/codebase ""{app}\MedallionShell.dll""";Flags: runhidden 64bit; Check: IsWin64
 
 
 ; Only if driver is .NET

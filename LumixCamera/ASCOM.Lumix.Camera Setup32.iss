@@ -25,7 +25,7 @@ WizardImageFile="C:\Program Files (x86)\ASCOM\Platform 6 Developer Components\In
 LicenseFile="C:\Program Files (x86)\ASCOM\Platform 6 Developer Components\Installer Generator\Resources\CreativeCommons.txt"
 ; {cf}\ASCOM\Uninstall\Camera folder created by Platform, always
 UninstallFilesDir="{cf}\ASCOM\Uninstall\Camera\ASCOM.Lumix.Camera"
-OutputDir=Y:\
+OutputDir="C:\Users\rober\source\repos\totoantibes\LumixCameraAscomDriver\"
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
