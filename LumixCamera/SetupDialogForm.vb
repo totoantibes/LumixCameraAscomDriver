@@ -215,7 +215,9 @@ Public Class SetupDialogForm
                     For Each el As XElement In Capability
                         Camera.MODEL = el.@model
                         Label8.Text = el.@model
-                        CBResolution.SelectedItem = Camera.Models(Camera.MODEL)
+                        '                        CBResolution.SelectedItem = Camera.Models(Camera.MODEL)
+                        CBResolution.SelectedIndex = CBResolution.FindString(Camera.Models(Camera.MODEL).ToString)
+
                         CameraFound = True
                     Next
 

@@ -5,13 +5,13 @@
 [Setup]
 AppID={{77b4d898-3116-40a5-91d4-4c41ff123d93}
 AppName=ASCOM ASCOM.Lumix.Camera Camera Driver
-AppVerName=ASCOM ASCOM.Lumix.Camera Camera Driver 7.0.3
-AppVersion=7.0.3
+AppVerName=ASCOM ASCOM.Lumix.Camera Camera Driver 7.0.4
+AppVersion=7.0.4
 AppPublisher=robert hasson <robert_hasson@yahoo.com>
 AppPublisherURL=mailto:robert_hasson@yahoo.com
 AppSupportURL=http://tech.groups.yahoo.com/group/ASCOM-Talk/
 AppUpdatesURL=http://ascom-standards.org/
-VersionInfoVersion=7.0.3
+VersionInfoVersion=7.0.4
 MinVersion=0,6.0
 DefaultDirName="{cf}\ASCOM\Camera"
 DisableDirPage=yes
