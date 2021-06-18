@@ -11,19 +11,10 @@ Public Class SetupDialogForm
 
     Private Sub OK_Button_Click(ByVal sender As System.Object, ByVal e As System.EventArgs) Handles OK_Button.Click ' OK button event handler
         If Camera.IPAddress IsNot Camera.IPAddressDefault Then
-            ' Camera.SendLumixMessage(Camera.SECURITY)
-            ' Camera.SendLumixMessage(Camera.DEVICE)
             Camera.SendLumixMessage(Camera.ISO + CBISO.SelectedItem)
             Camera.SendLumixMessage(Camera.SHUTTERSPEED + Camera.ShutterTable(CBShutterSpeed.SelectedIndex, 0))
             Camera.SendLumixMessage(Camera.QUALITY + "raw_fine") 'that way we get all the format all the time. drawback is that the SD cards has now both RAW+JPG
 
-            'If CBReadoutMode.SelectedItem.ToString.Equals("JPG") Or CBReadoutMode.SelectedItem.ToString.Equals("Thumb") Then
-            '    Camera.SendLumixMessage(Camera.QUALITY + "raw_fine")
-            'End If
-
-            'If CBReadoutMode.SelectedItem.ToString.Equals("RAW") Then
-            '    Camera.SendLumixMessage(Camera.QUALITY + "raw")
-            'End If
 
         End If
         Me.DialogResult = System.Windows.Forms.DialogResult.OK
@@ -215,7 +206,9 @@ Public Class SetupDialogForm
                     For Each el As XElement In Capability
                         Camera.MODEL = el.@model
                         Label8.Text = el.@model
-                        CBResolution.SelectedItem = Camera.Models(Camera.MODEL)
+                        '                        CBResolution.SelectedItem = Camera.Models(Camera.MODEL)
+                        CBResolution.SelectedIndex = CBResolution.FindString(Camera.Models(Camera.MODEL).ToString)
+
                         CameraFound = True
                     Next
 
@@ -262,5 +255,19 @@ Public Class SetupDialogForm
         End If
     End Sub
 
+    Private Sub Label8_Click(sender As Object, e As EventArgs) Handles Label8.Click
 
+    End Sub
+
+    Private Sub Label4_Click(sender As Object, e As EventArgs) Handles Label4.Click
+
+    End Sub
+
+    Private Sub CBShutterSpeed_SelectedIndexChanged(sender As Object, e As EventArgs) Handles CBShutterSpeed.SelectedIndexChanged
+
+    End Sub
+
+    Private Sub CBReadoutMode_SelectedIndexChanged(sender As Object, e As EventArgs) Handles CBReadoutMode.SelectedIndexChanged
+
+    End Sub
 End Class
