@@ -183,6 +183,7 @@ Public Class SetupDialogForm
         Dim ResponseText As String
         Dim Capabilities As XElement
         Dim CameraFound As Boolean = False
+        Dim CameraConnected As Boolean = False
 
         Dim IPValues As New List(Of IPAddress)(GetAllDevicesOnLAN().Keys)
         CBCameraIPAddress.Items.Clear()
@@ -208,22 +209,31 @@ Public Class SetupDialogForm
                     Using (myStreamReader)
                         ResponseText = myStreamReader.ReadToEnd
                     End Using
-                    Capabilities = XElement.Parse(ResponseText)
-                    Dim Capability As IEnumerable(Of XElement) =
+                    If ResponseText.ToString.Contains("camrply") Then
+                        Capabilities = XElement.Parse(ResponseText)
+                        '//{<result>err_already_connected</result>}
+
+                        If Capabilities.FirstNode.ToString.Contains("err_already_connected") Then
+                            CameraConnected = True
+                        Else
+
+                            Dim Capability As IEnumerable(Of XElement) =
                         From El In Capabilities.<contents_action_info>
                         Select El
-                    For Each el As XElement In Capability
-                        Camera.MODEL = el.@model
-                        Label8.Text = el.@model
-                        '                        CBResolution.SelectedItem = Camera.Models(Camera.MODEL)
-                        CBResolution.SelectedIndex = CBResolution.FindString(Camera.Models(Camera.MODEL).ToString)
+                            For Each el As XElement In Capability
+                                Camera.MODEL = el.@model
+                                Label8.Text = el.@model
+                                '                        CBResolution.SelectedItem = Camera.Models(Camera.MODEL)
+                                CBResolution.SelectedIndex = CBResolution.FindString(Camera.Models(Camera.MODEL).ToString)
 
-                        CameraFound = True
-                    Next
+                                CameraFound = True
+                            Next
 
-                    Exit For
+                            Exit For
+                        End If
+                    End If
                 Else
-                    SendStatus = 2 'message processed but not sent successfully
+                        SendStatus = 2 'message processed but not sent successfully
                 End If
             Catch e As WebException
                 If (e.Status = WebExceptionStatus.ProtocolError) Then
@@ -244,7 +254,9 @@ Public Class SetupDialogForm
             End Try
         Next
 
-        If (Not CameraFound) Then
+        If CameraConnected Then
+            MsgBox("your Camera is already connectede to another device", MsgBoxStyle.Information)
+        ElseIf (Not CameraFound) Then
             MsgBox("Camera was not found on the network. Make sure the camera is on and connected to your PC network", MsgBoxStyle.Information)
         End If
     End Sub
