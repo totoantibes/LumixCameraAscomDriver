@@ -11,19 +11,10 @@ Public Class SetupDialogForm
 
     Private Sub OK_Button_Click(ByVal sender As System.Object, ByVal e As System.EventArgs) Handles OK_Button.Click ' OK button event handler
         If Camera.IPAddress IsNot Camera.IPAddressDefault Then
-            ' Camera.SendLumixMessage(Camera.SECURITY)
-            ' Camera.SendLumixMessage(Camera.DEVICE)
             Camera.SendLumixMessage(Camera.ISO + CBISO.SelectedItem)
             Camera.SendLumixMessage(Camera.SHUTTERSPEED + Camera.ShutterTable(CBShutterSpeed.SelectedIndex, 0))
             Camera.SendLumixMessage(Camera.QUALITY + "raw_fine") 'that way we get all the format all the time. drawback is that the SD cards has now both RAW+JPG
 
-            'If CBReadoutMode.SelectedItem.ToString.Equals("JPG") Or CBReadoutMode.SelectedItem.ToString.Equals("Thumb") Then
-            '    Camera.SendLumixMessage(Camera.QUALITY + "raw_fine")
-            'End If
-
-            'If CBReadoutMode.SelectedItem.ToString.Equals("RAW") Then
-            '    Camera.SendLumixMessage(Camera.QUALITY + "raw")
-            'End If
 
         End If
         Me.DialogResult = System.Windows.Forms.DialogResult.OK
@@ -183,7 +174,6 @@ Public Class SetupDialogForm
         Dim ResponseText As String
         Dim Capabilities As XElement
         Dim CameraFound As Boolean = False
-        Dim CameraConnected As Boolean = False
 
         Dim IPValues As New List(Of IPAddress)(GetAllDevicesOnLAN().Keys)
         CBCameraIPAddress.Items.Clear()
@@ -209,31 +199,22 @@ Public Class SetupDialogForm
                     Using (myStreamReader)
                         ResponseText = myStreamReader.ReadToEnd
                     End Using
-                    If ResponseText.ToString.Contains("camrply") Then
-                        Capabilities = XElement.Parse(ResponseText)
-                        '//{<result>err_already_connected</result>}
-
-                        If Capabilities.FirstNode.ToString.Contains("err_already_connected") Then
-                            CameraConnected = True
-                        Else
-
-                            Dim Capability As IEnumerable(Of XElement) =
+                    Capabilities = XElement.Parse(ResponseText)
+                    Dim Capability As IEnumerable(Of XElement) =
                         From El In Capabilities.<contents_action_info>
                         Select El
-                            For Each el As XElement In Capability
-                                Camera.MODEL = el.@model
-                                Label8.Text = el.@model
-                                '                        CBResolution.SelectedItem = Camera.Models(Camera.MODEL)
-                                CBResolution.SelectedIndex = CBResolution.FindString(Camera.Models(Camera.MODEL).ToString)
+                    For Each el As XElement In Capability
+                        Camera.MODEL = el.@model
+                        Label8.Text = el.@model
+                        '                        CBResolution.SelectedItem = Camera.Models(Camera.MODEL)
+                        CBResolution.SelectedIndex = CBResolution.FindString(Camera.Models(Camera.MODEL).ToString)
 
-                                CameraFound = True
-                            Next
+                        CameraFound = True
+                    Next
 
-                            Exit For
-                        End If
-                    End If
+                    Exit For
                 Else
-                        SendStatus = 2 'message processed but not sent successfully
+                    SendStatus = 2 'message processed but not sent successfully
                 End If
             Catch e As WebException
                 If (e.Status = WebExceptionStatus.ProtocolError) Then
@@ -254,9 +235,7 @@ Public Class SetupDialogForm
             End Try
         Next
 
-        If CameraConnected Then
-            MsgBox("your Camera is already connectede to another device", MsgBoxStyle.Information)
-        ElseIf (Not CameraFound) Then
+        If (Not CameraFound) Then
             MsgBox("Camera was not found on the network. Make sure the camera is on and connected to your PC network", MsgBoxStyle.Information)
         End If
     End Sub
@@ -276,5 +255,19 @@ Public Class SetupDialogForm
         End If
     End Sub
 
+    Private Sub Label8_Click(sender As Object, e As EventArgs) Handles Label8.Click
 
+    End Sub
+
+    Private Sub Label4_Click(sender As Object, e As EventArgs) Handles Label4.Click
+
+    End Sub
+
+    Private Sub CBShutterSpeed_SelectedIndexChanged(sender As Object, e As EventArgs) Handles CBShutterSpeed.SelectedIndexChanged
+
+    End Sub
+
+    Private Sub CBReadoutMode_SelectedIndexChanged(sender As Object, e As EventArgs) Handles CBReadoutMode.SelectedIndexChanged
+
+    End Sub
 End Class
