@@ -389,6 +389,7 @@ Public Class Camera
             Models.Add("GM1", "16.0")
             Models.Add("GX7", "16.0")
             Models.Add("GH4", "16.05")
+            Models.Add("GH6", "25.2")
             Models.Add("GH3", "16.05")
             Models.Add("GH2", "16.05")
             Models.Add("GH1", "12.1")
@@ -400,6 +401,7 @@ Public Class Camera
             Models.Add("S1H", "24.2")
             Models.Add("BGH1", "10.2")
             Models.Add("G100", "20.3")
+            Models.Add("FZ1000", "20.1")
 
         End If
         '"10.2", "12.1", "16.0", "16.05", "20.0", "20.3", "24.2", "47.3"
@@ -436,6 +438,13 @@ Public Class Camera
         Resolutions(7)._X = 8368
         Resolutions(7)._Y = 5584
 
+        Resolutions(8)._resolution = "20.1"
+        Resolutions(8)._X = 5492
+        Resolutions(8)._Y = 3661
+
+        Resolutions(9)._resolution = "25.2"
+        Resolutions(9)._X = 5791
+        Resolutions(9)._Y = 4354
 
 
         ResolutionsJPG(0)._resolution = "12.1"
@@ -471,6 +480,14 @@ Public Class Camera
         ResolutionsJPG(7)._X = 8368
         ResolutionsJPG(7)._Y = 5584
 
+        ResolutionsJPG(8)._resolution = "20.1"
+        ResolutionsJPG(8)._X = 5472
+        ResolutionsJPG(8)._Y = 3648
+
+        ResolutionsJPG(9)._resolution = "25.2"
+        ResolutionsJPG(9)._X = 5776
+        ResolutionsJPG(9)._Y = 4336
+
 
         ResolutionsThumb(0)._resolution = "12.1"
         ResolutionsThumb(0)._X = 1440
@@ -503,6 +520,15 @@ Public Class Camera
         ResolutionsThumb(7)._resolution = "47.3"
         ResolutionsThumb(7)._X = 1440
         ResolutionsThumb(7)._Y = 1080
+
+        ResolutionsThumb(8)._resolution = "20.1"
+        ResolutionsThumb(8)._X = 1440
+        ResolutionsThumb(8)._Y = 1080
+
+
+        ResolutionsThumb(9)._resolution = "25.2"
+        ResolutionsThumb(9)._X = 1440
+        ResolutionsThumb(9)._Y = 1080
 
 
         'TODO: Implement your additional construction here
