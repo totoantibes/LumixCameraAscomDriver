@@ -1117,6 +1117,7 @@ Public Class Camera
                 TL.LogMessage("ImageArray Get", "Throwing InvalidOperationException because of a call to ImageArray before the first image has been taken!")
                 Throw New ASCOM.InvalidOperationException("Call to ImageArray before the first image has been taken!")
             End If
+            CurrentState = CameraStates.cameraDownload
             Dim Tiffimagefile As IO.FileStream
             Tiffimagefile = New FileStream(TiffFileName, IO.FileMode.Open)
             ReDim cameraImageArray(cameraNumX - 1, cameraNumY - 1) ' there are 3 channels: RVB. 
@@ -1170,6 +1171,8 @@ Public Class Camera
 
             TL.LogMessage("ImageArray Get", "getting the Array")
             cameraImageReady = False
+            CurrentState = CameraStates.cameraIdle
+
             Return cameraImageArray
         End Get
     End Property
@@ -1180,7 +1183,7 @@ Public Class Camera
                 TL.LogMessage("ImageArrayVariant Get", "Throwing InvalidOperationException because of a call to ImageArrayVariant before the first image has been taken!")
                 Throw New ASCOM.InvalidOperationException("Call to ImageArrayVariant before the first image has been taken!")
             End If
-
+            CurrentState = CameraStates.cameraDownload
             ReDim cameraImageArrayVariant(cameraNumX - 1, cameraNumY - 1)
             For i As Integer = 0 To cameraNumY - 1
                 For j As Integer = 0 To cameraNumX - 1
@@ -1188,6 +1191,7 @@ Public Class Camera
                 Next
             Next
             TL.LogMessage("ImageArray Variant Get", "getting the Array Variant")
+            CurrentState = CameraStates.cameraIdle
             Return cameraImageArrayVariant
         End Get
     End Property
@@ -1478,6 +1482,7 @@ Public Class Camera
         If (cameraStartX > ccdWidth) Then Throw New InvalidValueException("StartExposure", cameraStartX.ToString(), ccdWidth.ToString())
         If (cameraStartY > ccdHeight) Then Throw New InvalidValueException("StartExposure", cameraStartY.ToString(), ccdHeight.ToString())
 
+        cameraImageReady = False
         cameraLastExposureDuration = Duration
         exposureStart = DateTime.Now
         SendLumixMessage(RECMODE) 'makes sure it is not in playmode...
@@ -1628,7 +1633,7 @@ Public Class Camera
             End If
 
             SendLumixMessage(PLAYMODE)                'making sure the camera is in Playmode
-            CurrentState = CameraStates.cameraDownload
+            CurrentState = CameraStates.cameraReading
             CurrentPercentCompleted = 0
 
             nRead = 0
