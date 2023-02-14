@@ -781,6 +781,7 @@ Public Class Camera
     Public Sub AbortExposure() Implements ICameraV2.AbortExposure
         StopExposure()
         TL.LogMessage("AbortExposure", "Exposure Aborted")
+        CurrentState = CameraStates.cameraIdle
 
     End Sub
 
