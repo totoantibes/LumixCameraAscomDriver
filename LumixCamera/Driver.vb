@@ -782,6 +782,9 @@ Public Class Camera
         StopExposure()
         TL.LogMessage("AbortExposure", "Exposure Aborted")
         CurrentState = CameraStates.cameraIdle
+        cameraImageReady = False
+        TL.LogMessage("Camera ImageReady", "False")
+
 
     End Sub
 
@@ -1765,8 +1768,8 @@ Public Class Camera
 
         Catch ex As Exception
             TL.LogMessage("error in reading image", "error in reading image")
-            cameraImageReady = True
-            TL.LogMessage("Imageready", "True")
+            cameraImageReady = False
+            TL.LogMessage("Imageready", "False")
             CurrentState = CameraStates.cameraIdle
             Exit Sub
         End Try
