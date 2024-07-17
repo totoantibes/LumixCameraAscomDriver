@@ -1233,8 +1233,8 @@ Public Class Camera
 
     Public ReadOnly Property MaxADU() As Integer Implements ICameraV2.MaxADU
         Get
-            TL.LogMessage("MaxADU Get", "4096")
-            Return 4096
+            TL.LogMessage("MaxADU Get", "65536")
+            Return 65536
         End Get
     End Property
 
