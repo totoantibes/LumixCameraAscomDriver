@@ -313,7 +313,7 @@ Public Class Camera
     '        {"16384/256", "B"}
     '}
 
-    Public Shared ResolutionTable = {"10.2", "12.1", "16.0", "16.05", "20.0", "20.3", "24.2", "47.3"}
+    Public Shared ResolutionTable = {"10.2", "12.1", "16.0", "16.05", "20.0", "20.3", "24.2", "47.3", "25.2"}
 
 
     '
@@ -627,7 +627,7 @@ Public Class Camera
                     sensormmy = 24
                 End If
 
-                Dim index As UShort = Array.FindIndex(Resolutions, Function(f) f._resolution = My.Settings.Resolution)
+                Dim index As Integer = Array.FindIndex(Resolutions, Function(f) f._resolution = My.Settings.Resolution)
 
 
                 Select Case ReadoutMode
