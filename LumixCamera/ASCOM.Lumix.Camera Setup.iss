@@ -5,13 +5,13 @@
 [Setup]
 AppID={{77b4d898-3116-40a5-91d4-4c41ff123d93}
 AppName=ASCOM ASCOM.Lumix.Camera Camera Driver
-AppVerName=ASCOM ASCOM.Lumix.Camera Camera Driver 7.1.1
-AppVersion=7.1.1
+AppVerName=ASCOM ASCOM.Lumix.Camera Camera Driver 7.3
+AppVersion=7.3
 AppPublisher=robert hasson <robert_hasson@yahoo.com>
 AppPublisherURL=mailto:robert_hasson@yahoo.com
 AppSupportURL=http://tech.groups.yahoo.com/group/ASCOM-Talk/
 AppUpdatesURL=http://ascom-standards.org/
-VersionInfoVersion=7.1.1
+VersionInfoVersion=7.3
 MinVersion=0,6.0
 DefaultDirName="{cf}\ASCOM\Camera"
 DisableDirPage=yes
@@ -21,8 +21,8 @@ OutputBaseFilename="ASCOM.Lumix.Camera Setup"
 Compression=lzma
 SolidCompression=yes
 ; Put there by Platform if Driver Installer Support selected
-WizardImageFile="C:\Program Files (x86)\ASCOM\Platform 6 Developer Components\Installer Generator\Resources\WizardImage.bmp"
-LicenseFile="C:\Program Files (x86)\ASCOM\Platform 6 Developer Components\Installer Generator\Resources\CreativeCommons.txt"
+WizardImageFile="C:\Program Files (x86)\ASCOM\Developer\Installer Generator\Resources\WizardImage.bmp"
+LicenseFile="C:\Program Files (x86)\ASCOM\Developer\Installer Generator\Resources\CreativeCommons.txt"
 ; {cf}\ASCOM\Uninstall\Camera folder created by Platform, always
 UninstallFilesDir="{cf}\ASCOM\Uninstall\Camera\ASCOM.Lumix.Camera"
 OutputDir="C:\Users\rober\source\repos\totoantibes\LumixCameraAscomDriver\"

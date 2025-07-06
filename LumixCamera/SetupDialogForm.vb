@@ -1,10 +1,11 @@
-Imports System.IO
-Imports System.Net
+Imports System
 Imports System.Data
+Imports System.IO
+Imports System.Linq
+Imports System.Net
 Imports System.Net.NetworkInformation
 Imports System.Xml
 Imports System.Xml.Linq
-Imports System.Linq
 
 <ComVisible(False)>
 Public Class SetupDialogForm
@@ -17,6 +18,10 @@ Public Class SetupDialogForm
 
 
         End If
+        My.Settings.Resolution = CBResolution.SelectedItem.ToString()
+        My.Settings.ISO = CBISO.SelectedItem.ToString()
+        My.Settings.IPAddress = Camera.IPAddress
+        My.Settings.Save()
         Me.DialogResult = System.Windows.Forms.DialogResult.OK
         Me.Close()
     End Sub
@@ -162,6 +167,21 @@ Public Class SetupDialogForm
     Private Sub SetupDialogForm_Load(sender As System.Object, e As System.EventArgs) Handles MyBase.Load ' Form load event handler
         ' Retrieve current values of user settings from the ASCOM Profile
         InitUI()
+        ' Set default value for CBShutterSpeed
+        If CBShutterSpeed.Items.Count > 0 Then
+
+            CBShutterSpeed.SelectedIndex = 58 ' Bulb shutter speed
+        End If
+
+        ' Set default value for CBReadoutMode
+        If CBReadoutMode.Items.Count > 0 Then
+            CBReadoutMode.SelectedIndex = 2 ' Thumbnail readout mode
+        End If
+        If CBISO.Items.Count > 0 Then
+
+            CBISO.SelectedIndex = 18 ' 3200 ISO
+        End If
+        TBTempPath.Text = "C:\Temp\" ' default temp path"
 
     End Sub
 
@@ -214,9 +234,7 @@ Public Class SetupDialogForm
                             For Each el As XElement In Capability
                                 Camera.MODEL = el.@model
                                 Label8.Text = el.@model
-                                '                        CBResolution.SelectedItem = Camera.Models(Camera.MODEL)
-                                CBResolution.SelectedIndex = CBResolution.FindString(Camera.Models(Camera.MODEL).ToString)
-
+                                CBResolution.SelectedItem = Camera.Models(Camera.MODEL)
                                 CameraFound = True
                             Next
 
@@ -224,7 +242,7 @@ Public Class SetupDialogForm
                         End If
                     End If
                 Else
-                        SendStatus = 2 'message processed but not sent successfully
+                    SendStatus = 2 'message processed but not sent successfully
                 End If
             Catch e As WebException
                 If (e.Status = WebExceptionStatus.ProtocolError) Then
@@ -282,4 +300,14 @@ Public Class SetupDialogForm
     Private Sub CBReadoutMode_SelectedIndexChanged(sender As Object, e As EventArgs) Handles CBReadoutMode.SelectedIndexChanged
 
     End Sub
+
+    Private Sub CBResolution_SelectedIndexChanged(sender As Object, e As EventArgs) Handles CBResolution.SelectedIndexChanged
+        My.Settings.Resolution = CBResolution.SelectedItem.ToString()
+        My.Settings.Save()
+    End Sub
+
+    Private Sub OpenFileDialog1_FileOk(sender As Object, e As System.ComponentModel.CancelEventArgs) Handles OpenFileDialog1.FileOk
+
+    End Sub
 End Class
+
