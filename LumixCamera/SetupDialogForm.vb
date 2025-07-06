@@ -1,11 +1,10 @@
-Imports System
-Imports System.Data
 Imports System.IO
-Imports System.Linq
 Imports System.Net
+Imports System.Data
 Imports System.Net.NetworkInformation
 Imports System.Xml
 Imports System.Xml.Linq
+Imports System.Linq
 
 <ComVisible(False)>
 Public Class SetupDialogForm
@@ -234,7 +233,9 @@ Public Class SetupDialogForm
                             For Each el As XElement In Capability
                                 Camera.MODEL = el.@model
                                 Label8.Text = el.@model
-                                CBResolution.SelectedItem = Camera.Models(Camera.MODEL)
+                                '                        CBResolution.SelectedItem = Camera.Models(Camera.MODEL)
+                                CBResolution.SelectedIndex = CBResolution.FindString(Camera.Models(Camera.MODEL).ToString)
+
                                 CameraFound = True
                             Next
 
@@ -310,4 +311,3 @@ Public Class SetupDialogForm
 
     End Sub
 End Class
-
