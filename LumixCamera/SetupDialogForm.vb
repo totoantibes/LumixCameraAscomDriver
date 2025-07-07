@@ -20,7 +20,7 @@ Public Class SetupDialogForm
         My.Settings.Resolution = CBResolution.SelectedItem.ToString()
         My.Settings.ISO = CBISO.SelectedItem.ToString()
         My.Settings.IPAddress = Camera.IPAddress
-        My.Settings.Save()
+        My.Settings.TempPath = TBTempPath.Text
         Me.DialogResult = System.Windows.Forms.DialogResult.OK
         Me.Close()
     End Sub
@@ -176,11 +176,23 @@ Public Class SetupDialogForm
         If CBReadoutMode.Items.Count > 0 Then
             CBReadoutMode.SelectedIndex = 2 ' Thumbnail readout mode
         End If
+
+
+
         If CBISO.Items.Count > 0 Then
+
+
 
             CBISO.SelectedIndex = 18 ' 3200 ISO
         End If
-        TBTempPath.Text = "C:\Temp\" ' default temp path"
+
+
+
+        If My.Settings.TempPath <> "" Then
+            TBTempPath.Text = My.Settings.TempPath ' use the saved temp path
+        Else
+            TBTempPath.Text = "C:\Temp\" ' default temp path
+        End If
 
     End Sub
 
@@ -227,17 +239,29 @@ Public Class SetupDialogForm
                             CameraConnected = True
                         Else
 
-                            Dim Capability As IEnumerable(Of XElement) =
-                        From El In Capabilities.<contents_action_info>
-                        Select El
-                            For Each el As XElement In Capability
-                                Camera.MODEL = el.@model
-                                Label8.Text = el.@model
-                                '                        CBResolution.SelectedItem = Camera.Models(Camera.MODEL)
-                                CBResolution.SelectedIndex = CBResolution.FindString(Camera.Models(Camera.MODEL).ToString)
+                            '                            Dim Capability As IEnumerable(Of XElement) =
+                            'From El In Capabilities.<contents_action_info>
+                            'Select El
+                            '    For Each el As XElement In Capability
+                            '        Camera.MODEL = el.@model
+                            '        Label8.Text = el.@model
+                            '        '                        CBResolution.SelectedItem = Camera.Models(Camera.MODEL)
+                            '        CBResolution.SelectedIndex = CBResolution.FindString(Camera.Models(Camera.MODEL).ToString)
 
-                                CameraFound = True
-                            Next
+                            '        CameraFound = True
+                            '    Next
+
+                            If Not CameraFound Then
+                                Dim xml As XElement = XElement.Parse(ResponseText)
+                                Dim modelName As String = xml.<productinfo>.<modelname>.FirstOrDefault()?.Value
+
+                                If Not String.IsNullOrEmpty(modelName) Then
+                                    Camera.MODEL = modelName
+                                    Label8.Text = modelName
+                                    CameraFound = True
+                                End If
+
+                            End If
 
                             Exit For
                         End If
