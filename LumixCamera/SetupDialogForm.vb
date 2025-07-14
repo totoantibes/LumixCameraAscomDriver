@@ -239,17 +239,17 @@ Public Class SetupDialogForm
                             CameraConnected = True
                         Else
 
-                            '                            Dim Capability As IEnumerable(Of XElement) =
-                            'From El In Capabilities.<contents_action_info>
-                            'Select El
-                            '    For Each el As XElement In Capability
-                            '        Camera.MODEL = el.@model
-                            '        Label8.Text = el.@model
-                            '        '                        CBResolution.SelectedItem = Camera.Models(Camera.MODEL)
-                            '        CBResolution.SelectedIndex = CBResolution.FindString(Camera.Models(Camera.MODEL).ToString)
+                            Dim Capability As IEnumerable(Of XElement) =
+                            From El In Capabilities.<contents_action_info>
+                            Select El
+                            For Each el As XElement In Capability
+                                Camera.MODEL = el.@model
+                                Label8.Text = el.@model
+                                '                        CBResolution.SelectedItem = Camera.Models(Camera.MODEL)
+                                CBResolution.SelectedIndex = CBResolution.FindString(Camera.Models(Camera.MODEL).ToString)
 
-                            '        CameraFound = True
-                            '    Next
+                                CameraFound = True
+                            Next
 
                             If Not CameraFound Then
                                 Dim xml As XElement = XElement.Parse(ResponseText)

@@ -1373,11 +1373,10 @@ Public Class Camera
     Private Shared Function NumberPix() As String
         Dim response As String = SendLumixMessage(NUMPIX)
         Dim doc As XElement = XElement.Parse(response)
-        If doc...<content_number>.Value Then
-            Return doc...<content_number>.Value
-        Else   ' this deals with GH3 response which is different
+        If doc...<total_content_number>.Value Then
             Return doc...<total_content_number>.Value
         End If
+        Return ""
     End Function
 
 
