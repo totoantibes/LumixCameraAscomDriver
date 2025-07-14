@@ -1,5 +1,32 @@
 ﻿# Get latest tag
-$latestTag = git tag --sort=-v:refname | Select-Object -First 1
+# Get all tags matching semantic version pattern
+$tags = git tag | Where-Object { $_ -match '^v?(\d+)\.(\d+)\.(\d+)$' }
+
+# Parse tags into objects with numeric properties
+$tagObjects = $tags | ForEach-Object {
+    if ($_ -match '^v?(\d+)\.(\d+)\.(\d+)$') {
+        [PSCustomObject]@{
+            Raw = $_
+            Major = [int]$matches[1]
+            Minor = [int]$matches[2]
+            Patch = [int]$matches[3]
+        }
+    }
+}
+
+# Sort by Major, Minor, Patch descending and get the highest
+$latestTagObj = $tagObjects | Sort-Object Major, Minor, Patch -Descending | Select-Object -First 1
+
+if ($latestTagObj) {
+    $latestTag = $latestTagObj.Raw
+} else {
+    $latestTag = "v1.0.0"
+}
+
+
+
+
+#$latestTag = git tag --sort=-v:refname | Select-Object -First 1
 if ($latestTag -match '^v?(\d+)\.(\d+)\.(\d+)$') {
   $major = [int]$matches[1]
   $minor = [int]$matches[2] + 1
