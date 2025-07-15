@@ -27,14 +27,14 @@ if ($latestTagObj) {
 
 
 #$latestTag = git tag --sort=-v:refname | Select-Object -First 1
-if ($latestTag -match '^v?(\d+)\.(\d+)\.(\d+)$') {
-  $major = [int]$matches[1]
-  $minor = [int]$matches[2] + 1
-  $patch = 0
-  $newTag = "$major.$minor.$patch"
-} else {
-  $newTag = "1.0.0"
-}
+#if ($latestTag -match '^v?(\d+)\.(\d+)\.(\d+)$') {
+#  $major = [int]$matches[1]
+#  $minor = [int]$matches[2] + 1
+#  $patch = 0
+#  $newTag = "$major.$minor.$patch"
+#} else {
+#  $newTag = "1.0.0"
+#}
 git tag "v$newTag"
 git push origin "v$newTag"
 
@@ -76,4 +76,4 @@ msbuild "LumixCamera\LumixCamera.sln" /p:Configuration=Release /p:Platform="x86"
 git add .
 git commit -m "Release $newTag"
 git push
-gh release create "v$newTag" LumixCamera\OutputDir\*.exe --title "Release $newTag"
+gh release create "v$newTag" *.exe --title "Release $newTag"

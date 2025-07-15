@@ -289,7 +289,7 @@ Public Class SetupDialogForm
         Next
 
         If CameraConnected Then
-            MsgBox("your Camera is already connectede to another device", MsgBoxStyle.Information)
+            MsgBox("your Camera is already connected to another device", MsgBoxStyle.Information)
         ElseIf (Not CameraFound) Then
             MsgBox("Camera was not found on the network. Make sure the camera is on and connected to your PC network", MsgBoxStyle.Information)
         End If
