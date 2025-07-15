@@ -26,15 +26,15 @@ if ($latestTagObj) {
 
 
 
-#$latestTag = git tag --sort=-v:refname | Select-Object -First 1
-#if ($latestTag -match '^v?(\d+)\.(\d+)\.(\d+)$') {
-#  $major = [int]$matches[1]
-#  $minor = [int]$matches[2] + 1
-#  $patch = 0
-#  $newTag = "$major.$minor.$patch"
-#} else {
-#  $newTag = "1.0.0"
-#}
+$latestTag = git tag --sort=-v:refname | Select-Object -First 1
+if ($latestTag -match '^v?(\d+)\.(\d+)\.(\d+)$') {
+  $major = [int]$matches[1]
+  $minor = [int]$matches[2] + 1
+  $patch = 0
+  $newTag = "$major.$minor.$patch"
+} else {
+  $newTag = "1.0.0"
+}
 git tag "v$newTag"
 git push origin "v$newTag"
 
