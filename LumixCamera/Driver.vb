@@ -617,6 +617,10 @@ Public Class Camera
             Dim d As MyDelegate2 = AddressOf Polling
 
             If value Then
+                If My.Settings.ConnectionMode = "USB" Then
+                    ConnectUsb()
+                    Return
+                End If
                 connectedState = True
                 TL.LogMessage("Connected Set", "Connecting to IP Address " + IPAddress)
                 ' TODO connect to the device
@@ -656,6 +660,11 @@ Public Class Camera
 
 
             Else
+                If My.Settings.ConnectionMode = "USB" Then
+                    connectedState = False
+                    UsbTransport.Disconnect()
+                    Return
+                End If
                 connectedState = False
                 TL.LogMessage("Connected Set", "Disconnecting from IP Address " + IPAddress)
                 ' TODO disconnect from the device
@@ -1486,6 +1495,87 @@ Public Class Camera
     'depending on the transfer format the img is fetched either in RAW or in JPG
 
 
+    ''' <summary>Connect over USB (Standard/public SDK) and set sensor geometry from the model.</summary>
+    Private Sub ConnectUsb()
+        Try
+            UsbTransport.Connect()
+            MODEL = UsbTransport.ModelName
+            TempPath = My.Settings.TempPath
+            Dim w As Integer, h As Integer, p As Double
+            UsbTransport.GetSpecs(MODEL, w, h, p)
+            ccdWidth = w : ccdHeight = h
+            cameraNumX = w : cameraNumY = h
+            pixelSize = p                     ' PixelSizeX/Y in microns
+            sensormmx = p * w / 1000.0        ' keep sensor-mm consistent with pitch
+            sensormmy = p * h / 1000.0
+            ReadoutMode = 1 : CurrentROM = 1  ' USB delivers RW2 (RAW)
+            connectedState = True
+            TL.LogMessage("Connected Set", "USB connected: " & MODEL & " (" & w & "x" & h & ")")
+        Catch ex As Exception
+            connectedState = False
+            TL.LogMessage("USB connect failed", ex.Message)
+            Throw New ASCOM.DriverException("USB connect failed: " & ex.Message)
+        End Try
+    End Sub
+
+    ''' <summary>Background worker: one-shot USB capture -> file -> TIFF -> ImageReady.</summary>
+    Private Sub UsbCaptureWorker()
+        Try
+            Dim res = UsbTransport.Capture(TempPath, 90000)
+            If res IsNot Nothing AndAlso res.Success Then
+                ConvertToTiff(res.FilePath, res.Format <> 1) ' format 1 = JPEG, otherwise RAW
+                If Not String.IsNullOrEmpty(TiffFileName) AndAlso IO.File.Exists(TiffFileName) Then
+                    cameraImageReady = True
+                    CurrentState = CameraStates.cameraIdle
+                    TL.LogMessage("USB capture", "image ready: " & res.FilePath)
+                Else
+                    CurrentState = CameraStates.cameraError
+                    TL.LogMessage("USB capture", "conversion produced no TIFF")
+                End If
+            Else
+                CurrentState = CameraStates.cameraError
+                TL.LogMessage("USB capture failed", If(res IsNot Nothing, res.Error, "null result"))
+            End If
+        Catch ex As Exception
+            CurrentState = CameraStates.cameraError
+            TL.LogMessage("USB capture exception", ex.Message)
+        End Try
+    End Sub
+
+    ''' <summary>Convert a captured RW2/JPG file to the TIFF the ImageArray path reads.</summary>
+    Private Sub ConvertToTiff(imagepath As String, isRaw As Boolean)
+        TiffFileName = imagepath.Substring(0, imagepath.Length - 3) & "tif"
+        Try
+            If isRaw Then
+                Dim h As IntPtr
+                If IntPtr.Size = 8 Then
+                    h = libraw_init64(1)
+                    libraw_open_file64(h, imagepath)
+                    libraw_unpack64(h)
+                    libraw_set_output_tif64(h, 1)
+                    libraw_dcraw_process64(h)
+                    libraw_dcraw_ppm_tiff_writer64(h, TiffFileName)
+                    libraw_close64(h)
+                Else
+                    h = libraw_init32(1)
+                    libraw_open_file32(h, imagepath)
+                    libraw_unpack32(h)
+                    libraw_set_output_tif32(h, 1)
+                    libraw_dcraw_process32(h)
+                    libraw_dcraw_ppm_tiff_writer32(h, TiffFileName)
+                    libraw_close32(h)
+                End If
+            Else
+                Dim jpg = Image.FromFile(imagepath)
+                jpg.Save(TiffFileName, System.Drawing.Imaging.ImageFormat.Tiff)
+                jpg.Dispose()
+            End If
+            Try : My.Computer.FileSystem.DeleteFile(imagepath) : Catch : End Try
+        Catch ex As Exception
+            TL.LogMessage("ConvertToTiff", "failed: " & ex.Message)
+        End Try
+    End Sub
+
     Public Sub StartExposure(Duration As Double, Light As Boolean) Implements ICameraV2.StartExposure
         If (Duration < 0.0) Then Throw New InvalidValueException("StartExposure", Duration.ToString(), "0.0 upwards")
         If (cameraNumX > ccdWidth) Then Throw New InvalidValueException("StartExposure", cameraNumX.ToString(), ccdWidth.ToString())
@@ -1496,6 +1586,16 @@ Public Class Camera
         cameraImageReady = False
         cameraLastExposureDuration = Duration
         exposureStart = DateTime.Now
+        If My.Settings.ConnectionMode = "USB" Then
+            ' USB: fire the capture on a background thread so StartExposure returns
+            ' promptly. NOTE: exposure-time -> raw shutter mapping is a follow-up; this
+            ' captures at the camera's current shutter setting.
+            CurrentState = CameraStates.cameraExposing
+            Dim t As New System.Threading.Thread(AddressOf UsbCaptureWorker)
+            t.IsBackground = True
+            t.Start()
+            Return
+        End If
         SendLumixMessage(RECMODE) 'makes sure it is not in playmode...
         SendLumixMessage(SHUTTERSTART)
         TL.LogMessage("StartExposure", Duration.ToString() + " " + Light.ToString())

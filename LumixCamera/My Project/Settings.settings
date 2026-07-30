@@ -11,6 +11,9 @@
     <Setting Name="Speed" Type="System.String" Scope="User">
       <Value Profile="(Default)" />
     </Setting>
+    <Setting Name="ConnectionMode" Type="System.String" Scope="User">
+      <Value Profile="(Default)">WiFi</Value>
+    </Setting>
     <Setting Name="TransferFormat" Type="System.String" Scope="User">
       <Value Profile="(Default)" />
     </Setting>

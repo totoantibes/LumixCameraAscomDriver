@@ -186,6 +186,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Driver.vb" />
+    <Compile Include="UsbTransport.vb" />
     <Compile Include="My Project\AssemblyInfo.vb" />
     <Compile Include="My Project\Application.Designer.vb">
       <AutoGen>True</AutoGen>
@@ -264,6 +265,18 @@
   </ItemGroup>
   <ItemGroup>
     <WCFMetadata Include="Connected Services\" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- USB (public + Tether) LUMIX SDK path. SDK-style net472 C# library. -->
+    <ProjectReference Include="..\ASCOM.Lumix.Usb\ASCOM.Lumix.Usb.csproj">
+      <Name>ASCOM.Lumix.Usb</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Public LUMIX USB SDK native DLL (redistributable), copied next to the driver. -->
+    <Content Include="native\x64\Lmxptpif.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.VisualBasic.targets" />
   <PropertyGroup>

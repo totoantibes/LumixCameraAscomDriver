@@ -89,6 +89,18 @@ Namespace My
                 Me("Speed") = value
             End Set
         End Property
+
+        <Global.System.Configuration.UserScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("WiFi")>  _
+        Public Property ConnectionMode() As String
+            Get
+                Return CType(Me("ConnectionMode"),String)
+            End Get
+            Set
+                Me("ConnectionMode") = value
+            End Set
+        End Property
         
         <Global.System.Configuration.UserScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
