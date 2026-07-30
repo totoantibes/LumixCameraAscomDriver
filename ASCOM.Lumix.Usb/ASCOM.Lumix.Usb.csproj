@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- USB (public + Tether) LUMIX SDK binding for the ASCOM driver. net472 so the
+       VB .NET Framework 4.7.2 driver can reference it directly. The native binding
+       is a straight transcription of the NINA plugin's, using an explicit
+       LoadLibraryEx of the chosen Lmxptpif.dll before the first P/Invoke (the
+       .NET-Framework substitute for NativeLibrary.SetDllImportResolver). -->
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>ASCOM.Lumix.Usb</AssemblyName>
+    <RootNamespace>ASCOM.Lumix.Usb</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+</Project>
