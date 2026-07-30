@@ -337,33 +337,13 @@ Public Class Camera
         ROMAL.Add("RAW")
         ROMAL.Add("Thumb")
 
-        ISOTableAL.Add("i_auto")
-        ISOTableAL.Add("i_iso")
-        ISOTableAL.Add("80")
-        ISOTableAL.Add("100")
-        ISOTableAL.Add("125")
-        ISOTableAL.Add("160")
-        ISOTableAL.Add("200")
-        ISOTableAL.Add("250")
-        ISOTableAL.Add("320")
-        ISOTableAL.Add("400")
-        ISOTableAL.Add("500")
-        ISOTableAL.Add("640")
-        ISOTableAL.Add("800")
-        ISOTableAL.Add("1000")
-        ISOTableAL.Add("1600")
-        ISOTableAL.Add("2000")
-        ISOTableAL.Add("2500")
-        ISOTableAL.Add("3200")
-        ISOTableAL.Add("4000")
-        ISOTableAL.Add("5000")
-        ISOTableAL.Add("6400")
-        ISOTableAL.Add("8000")
-        ISOTableAL.Add("10000")
-        ISOTableAL.Add("12800")
-        ISOTableAL.Add("16000")
-        ISOTableAL.Add("20000")
-        ISOTableAL.Add("25600")
+        ' Derive the gain list from the single ISOTable source so the two lists can
+        ' never diverge. The old hand-maintained copy was missing "1250" and used
+        ' "i_auto" where ISOTable (and the value actually sent to the camera) uses
+        ' "auto" — that mismatch made Auto/1250 map to the wrong gain index.
+        For Each isoValue As String In ISOTable
+            ISOTableAL.Add(isoValue)
+        Next
 
         If Models.Contains("GX9") = False Then
             Models.Add("GX9", "20.3")
@@ -659,8 +639,7 @@ Public Class Camera
                 connectedState = False
                 TL.LogMessage("Connected Set", "Disconnecting from IP Address " + IPAddress)
                 ' TODO disconnect from the device
-                'd.EndInvoke(Nothing)
-                d.Invoke(False)
+                ' Setting connectedState = False above signals the Polling loop to exit.
             End If
         End Set
     End Property
@@ -670,11 +649,13 @@ Public Class Camera
     Private Delegate Function MyDelegate2(ByVal Bool As Boolean) As Boolean
 
     Function Polling(Bool As Boolean) As Boolean
-
-        While Bool
-            System.Threading.Thread.Sleep(10000) ' Sleep for 10 sec  
+        ' Loop on the live connected flag, NOT the by-value 'Bool' argument (which
+        ' stayed True forever, so the polling thread never stopped on disconnect and
+        ' kept hitting the camera every 10s / leaked a thread per reconnect).
+        While connectedState
+            System.Threading.Thread.Sleep(10000) ' Sleep for 10 sec
             SendLumixMessage(STATE)
-            ' System.Threading.Thread.Sleep(1000) ' Sleep for 1s after the capture so the camera can breath a bit. 
+            ' System.Threading.Thread.Sleep(1000) ' Sleep for 1s after the capture so the camera can breath a bit.
         End While
         Return True
     End Function
@@ -995,9 +976,15 @@ Public Class Camera
             'Throw New ASCOM.PropertyNotImplementedException("Gain", False)
         End Get
         Set(value As Short)
-            SendLumixMessage(ISO + value.ToString)
-            CurrentISO = value
-            TL.LogMessage("Gain Set", "Setting ISO to " + ISOTableAL(value.ToString))
+            ' Gain is an index into Gains (= ISOTableAL); send the ISO value AT that
+            ' index, not the index number itself (was 'ISO + value' -> e.g. value=17,
+            ' which the camera rejects). Connect sets Gain = IndexOf(saved ISO), so
+            ' this also stops connect from clobbering the ISO the setup dialog sent.
+            If value >= 0 AndAlso value < ISOTableAL.Count Then
+                SendLumixMessage(ISO + ISOTableAL(value).ToString())
+                CurrentISO = value
+                TL.LogMessage("Gain Set", "Setting ISO to " & ISOTableAL(value).ToString())
+            End If
             'Throw New ASCOM.PropertyNotImplementedException("Gain", True)
         End Set
     End Property
