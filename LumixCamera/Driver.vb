@@ -1004,6 +1004,11 @@ Public Class Camera
             'Throw New ASCOM.PropertyNotImplementedException("Gain", False)
         End Get
         Set(value As Short)
+            If My.Settings.ConnectionMode = "USB" Then
+                UsbTransport.SetIsoIndex(value) ' index into the camera's supported ISO list
+                CurrentISO = value
+                Return
+            End If
             SendLumixMessage(ISO + value.ToString)
             CurrentISO = value
             TL.LogMessage("Gain Set", "Setting ISO to " + ISOTableAL(value.ToString))
@@ -1521,6 +1526,9 @@ Public Class Camera
     ''' <summary>Background worker: one-shot USB capture -> file -> TIFF -> ImageReady.</summary>
     Private Sub UsbCaptureWorker()
         Try
+            ' Snap the requested exposure to the nearest supported shutter speed before firing.
+            Dim actual As Double = UsbTransport.SetShutterSeconds(cameraLastExposureDuration)
+            TL.LogMessage("USB capture", "requested " & cameraLastExposureDuration & "s -> nearest " & actual & "s")
             Dim res = UsbTransport.Capture(TempPath, 90000)
             If res IsNot Nothing AndAlso res.Success Then
                 ConvertToTiff(res.FilePath, res.Format <> 1) ' format 1 = JPEG, otherwise RAW

@@ -113,6 +113,31 @@ namespace ASCOM.Lumix.Usb
             finally { Marshal.DestroyStructure(p, typeof(NativeMethods.LMX_STRUCT_REC_CTRL)); Marshal.FreeHGlobal(p); }
         }
 
+        /// <summary>
+        /// Camera-free check of the shutter decode + nearest-match algorithm against a
+        /// synthetic supported list (4 s whole, 1/8 s and 1/125 s fractional, + BULB/AUTO
+        /// which must be dropped). No SDK/device needed.
+        /// </summary>
+        public static string DiagnoseShutterMapping()
+        {
+            uint[] synthetic = { 0x80000FA0u /*4s*/, 8000u /*1/8s*/, 125000u /*1/125s*/,
+                                 NativeMethods.SS_BULB, NativeMethods.SS_AUTO /*dropped*/ };
+            var secs = new List<double>(); var raws = new List<long>();
+            foreach (uint v in synthetic)
+            {
+                double s = UsbCamera.DecodeShutterSeconds(v);
+                if (s > 0) { secs.Add(s); raws.Add(v); }
+            }
+            Func<double, string> nearest = req =>
+            {
+                int bi = 0; double be = Math.Abs(secs[0] - req);
+                for (int i = 1; i < secs.Count; i++) { double e = Math.Abs(secs[i] - req); if (e < be) { be = e; bi = i; } }
+                return $"{req}s->{secs[bi]}s(0x{raws[bi]:X})";
+            };
+            return $"decoded {secs.Count} of {synthetic.Length} (BULB/AUTO dropped): [{string.Join(", ", secs)}] ; "
+                   + $"nearest {nearest(3.9)}, {nearest(0.1)}, {nearest(0.007)}";
+        }
+
         private static string ResolveDll(string dllPath)
         {
             if (string.IsNullOrEmpty(dllPath)) return null;

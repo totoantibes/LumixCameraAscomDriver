@@ -53,6 +53,28 @@ Public Class UsbTransport
         Return _cam.CaptureOneShot(dir, timeoutMs)
     End Function
 
+    ''' <summary>Snap the requested exposure to the nearest supported shutter speed and set it. Returns the actual seconds.</summary>
+    Public Shared Function SetShutterSeconds(seconds As Double) As Double
+        If _cam Is Nothing Then Return seconds
+        Dim actual As Double = seconds
+        Dim raw As Long = _cam.NearestShutterRaw(seconds, actual)
+        If raw <> 0 Then _cam.SetShutter(raw)
+        Return actual
+    End Function
+
+    ''' <summary>Number of supported ISO values (ASCOM gain list size).</summary>
+    Public Shared ReadOnly Property IsoCount As Integer
+        Get
+            Return If(_cam IsNot Nothing, _cam.IsoValues.Count, 0)
+        End Get
+    End Property
+
+    ''' <summary>Set ISO by ASCOM gain index into the camera's supported ISO list.</summary>
+    Public Shared Sub SetIsoIndex(index As Integer)
+        If _cam Is Nothing Then Return
+        If index >= 0 AndAlso index < _cam.IsoValues.Count Then _cam.SetIso(_cam.IsoValues(index))
+    End Sub
+
     ''' <summary>
     ''' Minimal sensor spec by USB model name (DC- prefixed, as the USB SDK reports it).
     ''' Returns full-res width/height and pixel pitch (µm); DefaultLumix otherwise.

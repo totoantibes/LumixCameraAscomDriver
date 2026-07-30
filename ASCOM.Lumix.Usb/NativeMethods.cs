@@ -114,5 +114,24 @@ namespace ASCOM.Lumix.Usb
         internal static extern byte LMX_func_api_Get_Object(uint objectHandle, ref byte lpStoreBufAdder, uint storeBufSize, out uint retError);
         [DllImport(DLLNAME, ExactSpelling = true, CallingConvention = CC)]
         internal static extern byte LMX_func_api_Skip_Object_Transfer(uint objectHandle, out uint retError);
+
+        // ---- capability read (ISO / shutter supported lists) ----
+        // The ISO/SS capability structs are a few KB and begin with a
+        // LMX_STRUCT_PTP_FORM_ENUM_UInt32 Capa_Enum (NumOfVal@0 ushort, SupportVal@4
+        // int[512]). Read via a raw buffer (like enumerate) so we don't have to
+        // pre-allocate the ByValArrays for by-ref marshalling.
+        internal const int CAPA_BUF_SIZE = 8192;   // >= sizeof(either CAPA struct)
+        internal const int CAPA_NUMOFVAL_OFF = 0;  // Capa_Enum.NumOfVal (ushort)
+        internal const int CAPA_SUPPORTVAL_OFF = 4; // Capa_Enum.SupportVal[0] (int)
+
+        // Shutter sentinels to skip when decoding the supported list.
+        internal const uint SS_BULB = 0xFFFFFFFF;
+        internal const uint SS_UNKNOWN = 0x0FFFFFFE;
+        internal const uint SS_AUTO = 0x0FFFFFFF;
+
+        [DllImport(DLLNAME, ExactSpelling = true, CallingConvention = CC)]
+        internal static extern byte LMX_func_api_SS_Get_Capability(IntPtr pSS_CapaInfo, out uint retError);
+        [DllImport(DLLNAME, ExactSpelling = true, CallingConvention = CC)]
+        internal static extern byte LMX_func_api_ISO_Get_Capability(IntPtr pIsoCapaInfo, out uint retError);
     }
 }

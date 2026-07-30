@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -31,8 +32,18 @@ namespace ASCOM.Lumix.Usb
         private string _captureDir;
         private CaptureResult _result;
 
+        // Supported shutter list (parallel: seconds[i] <-> raw[i]) and ISO list, read on connect.
+        private readonly List<double> _ssSeconds = new List<double>();
+        private readonly List<long> _ssRaw = new List<long>();
+        private readonly List<uint> _isoValues = new List<uint>();
+
         public string ModelName { get; private set; }
         public bool IsConnected { get { return _connected; } }
+
+        /// <summary>Supported whole/fractional shutter speeds in seconds (nearest-match source).</summary>
+        public IReadOnlyList<double> ShutterSeconds { get { return _ssSeconds; } }
+        /// <summary>Supported ISO values as raw SDK codes (index = ASCOM gain).</summary>
+        public IReadOnlyList<uint> IsoValues { get { return _isoValues; } }
 
         private UsbCamera()
         {
@@ -78,7 +89,76 @@ namespace ASCOM.Lumix.Usb
             NativeMethods.LMX_func_api_Reg_NotifyCallback(NativeMethods.EV_REC_CTRL_RELEASE, cam._callback);
 
             cam._connected = true;
+            cam.ReadCapabilities();
             return cam;
+        }
+
+        /// <summary>Read the camera's supported shutter + ISO lists (call after Open).</summary>
+        public void ReadCapabilities()
+        {
+            _ssSeconds.Clear(); _ssRaw.Clear(); _isoValues.Clear();
+
+            foreach (uint v in ReadEnumList(true))   // shutter
+            {
+                double sec = DecodeShutterSeconds(v);
+                if (sec <= 0) continue;
+                _ssSeconds.Add(sec);
+                _ssRaw.Add(v); // raw code for SS_Set_Param (long)
+            }
+            foreach (uint iso in ReadEnumList(false)) // ISO
+                if (iso != 0) _isoValues.Add(iso);
+        }
+
+        // Read a capability enum's supported values via a raw buffer (NumOfVal@0, SupportVal@4).
+        private static uint[] ReadEnumList(bool shutter)
+        {
+            IntPtr buf = Marshal.AllocHGlobal(NativeMethods.CAPA_BUF_SIZE);
+            try
+            {
+                Marshal.Copy(new byte[NativeMethods.CAPA_BUF_SIZE], 0, buf, NativeMethods.CAPA_BUF_SIZE);
+                uint err;
+                if (shutter) NativeMethods.LMX_func_api_SS_Get_Capability(buf, out err);
+                else NativeMethods.LMX_func_api_ISO_Get_Capability(buf, out err);
+
+                int count = (ushort)Marshal.ReadInt16(buf, NativeMethods.CAPA_NUMOFVAL_OFF);
+                if (count < 0 || count > NativeMethods.USER_PTP_ARRAY_MAX) count = 0;
+                var list = new uint[count];
+                for (int i = 0; i < count; i++)
+                    list[i] = (uint)Marshal.ReadInt32(buf, NativeMethods.CAPA_SUPPORTVAL_OFF + i * 4);
+                return list;
+            }
+            finally { Marshal.FreeHGlobal(buf); }
+        }
+
+        /// <summary>
+        /// Decode a raw shutter code to seconds: whole seconds carry 0x80000000
+        /// (sec=(v&amp;0x7fffffff)/1000), fractional are 1/x (sec=1000/v). Returns -1 for
+        /// BULB/AUTO/UNKNOWN/0 or any non-positive result.
+        /// </summary>
+        public static double DecodeShutterSeconds(uint v)
+        {
+            if (v == 0 || v == NativeMethods.SS_BULB || v == NativeMethods.SS_UNKNOWN || v == NativeMethods.SS_AUTO) return -1;
+            double sec = (v & 0x80000000) != 0 ? (double)(v & 0x7fffffff) / 1000.0 : 1000.0 / v;
+            return sec > 0 ? sec : -1;
+        }
+
+        /// <summary>
+        /// Nearest supported shutter speed (raw code for <see cref="SetShutter"/>) to the
+        /// requested seconds. Returns 0 and actualSeconds=requested if the list is unknown.
+        /// </summary>
+        public long NearestShutterRaw(double requestedSeconds, out double actualSeconds)
+        {
+            actualSeconds = requestedSeconds;
+            if (_ssSeconds.Count == 0) return 0;
+            int bestIdx = 0;
+            double bestErr = Math.Abs(_ssSeconds[0] - requestedSeconds);
+            for (int i = 1; i < _ssSeconds.Count; i++)
+            {
+                double err = Math.Abs(_ssSeconds[i] - requestedSeconds);
+                if (err < bestErr) { bestErr = err; bestIdx = i; }
+            }
+            actualSeconds = _ssSeconds[bestIdx];
+            return _ssRaw[bestIdx];
         }
 
         /// <summary>Set ISO to a raw SDK value (from the camera's supported list).</summary>
