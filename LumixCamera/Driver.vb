@@ -239,7 +239,7 @@ Public Class Camera
     {"-341/256", "2.5s"},
     {"-426/256", "3.2s"},
     {"-512/256", "4s"},
-    {"-512/256", "5s"},
+    {"-598/256", "5s"},
     {"-682/256", "6s"},
     {"-768/256", "8s"},
     {"-853/256", "10s"},
@@ -617,7 +617,6 @@ Public Class Camera
             Dim d As MyDelegate2 = AddressOf Polling
 
             If value Then
-                connectedState = True
                 TL.LogMessage("Connected Set", "Connecting to IP Address " + IPAddress)
                 ' TODO connect to the device
                 IPAddress = My.Settings.IPAddress
@@ -651,6 +650,9 @@ Public Class Camera
 
                 cameraNumX = ccdWidth
                 cameraNumY = ccdHeight
+                ' Mark connected only once the setup above succeeded (was set at the
+                ' top, so a throw left IsConnected reporting True on a half-open driver).
+                connectedState = True
                 d.BeginInvoke(True, Nothing, Nothing)
 
 
@@ -1245,8 +1247,10 @@ Public Class Camera
 
     Public ReadOnly Property MaxADU() As Integer Implements ICameraV2.MaxADU
         Get
-            TL.LogMessage("MaxADU Get", "4096")
-            Return 4096
+            ' ImageArray delivers byte values scaled x256 (16-bit range), so report a
+            ' 16-bit ceiling rather than 4096.
+            TL.LogMessage("MaxADU Get", "65535")
+            Return 65535
         End Get
     End Property
 
@@ -1495,9 +1499,8 @@ Public Class Camera
 
         cameraImageReady = False
         cameraLastExposureDuration = Duration
-        exposureStart = DateTime.Now
-        SendLumixMessage(RECMODE) 'makes sure it is not in playmode...
-        SendLumixMessage(SHUTTERSTART)
+        ' The camera-start HTTP round-trips now happen in WaitBulb (the async part) so
+        ' StartExposure returns promptly, as ASCOM expects.
         TL.LogMessage("StartExposure", Duration.ToString() + " " + Light.ToString())
         CurrentState = CameraStates.cameraExposing
         Dim d As MyDelegate = AddressOf WaitBulb
@@ -1515,8 +1518,12 @@ Public Class Camera
     Private Delegate Function MyDelegate(ByVal Duration As Double) As Boolean
 
     Function WaitBulb(ByVal Duration As Double) As Boolean
+        ' Begin the exposure here (moved out of StartExposure so it returns promptly).
+        exposureStart = DateTime.Now
+        SendLumixMessage(RECMODE) 'makes sure it is not in playmode...
+        SendLumixMessage(SHUTTERSTART)
         TL.LogMessage("waiting while capturing", Duration.ToString)
-        System.Threading.Thread.Sleep(Duration * 1000) ' Sleep for the duration to simulate exposure, if this is in Bulb mode 
+        System.Threading.Thread.Sleep(Duration * 1000) ' Sleep for the duration to simulate exposure, if this is in Bulb mode
         StopExposure()
         ' System.Threading.Thread.Sleep(1000) ' Sleep for 1s after the capture so the camera can breath a bit. 
         Return True
@@ -1584,7 +1591,13 @@ Public Class Camera
     End Sub
 
 
-    Private Sub ReadImageFromCamera()
+    Private Sub ReadImageFromCamera(ar As IAsyncResult)
+        ' Reap the WaitBulb async call (this runs as its completion callback) so the
+        ' delegate's async handle isn't leaked.
+        Try
+            CType(CType(ar, AsyncResult).AsyncDelegate, MyDelegate).EndInvoke(ar)
+        Catch
+        End Try
         Dim Pictures As XmlDocument                     'the XML with all the results from the camea
         Dim XPictures As XElement
         Dim Images As String = "" 'the array of the urls in the camera
