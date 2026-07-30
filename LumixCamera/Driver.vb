@@ -777,12 +777,14 @@ Public Class Camera
     Private exposureStart As DateTime = DateTime.MinValue
     Private cameraLastExposureDuration As Double = 0.0
     Private cameraImageReady As Boolean = False
+    Private cameraAborted As Boolean = False ' set by AbortExposure so the async capture chain stops
     'Private cameraImageArray As Integer(,,)
     'Private cameraImageArrayVariant As Object(,,)
     Private cameraImageArray As Integer(,)
     Private cameraImageArrayVariant As Object(,)
 
     Public Sub AbortExposure() Implements ICameraV2.AbortExposure
+        cameraAborted = True ' the in-flight WaitBulb -> ReadImageFromCamera chain checks this and bails
         StopExposure()
         TL.LogMessage("AbortExposure", "Exposure Aborted")
         CurrentState = CameraStates.cameraIdle
@@ -1137,12 +1139,17 @@ Public Class Camera
             Dim bytesPerPixel As UShort
             bytesPerPixel = bitmapSource.Format.BitsPerPixel / 8
             stride = bitmapSource.PixelWidth * bytesPerPixel
+            ' Clamp the copy to the smaller of the table size and the decoded image
+            ' (the JPG/thumb is often smaller), so we never index past the pixel
+            ' buffer or the output array.
+            Dim imgW As Integer = Math.Min(cameraNumX, bitmapSource.PixelWidth)
+            Dim imgH As Integer = Math.Min(cameraNumY, bitmapSource.PixelHeight)
 
             If CurrentROM = 1 Then  'RAW
                 Dim pixels(bitmapSource.PixelHeight * stride * 2) As Byte
                 bitmapSource.CopyPixels(pixels, stride, 0)
-                For y = 0 To (cameraNumY - 2)
-                    For x = 0 To (cameraNumX - 2)
+                For y = 0 To (imgH - 2)
+                    For x = 0 To (imgW - 2)
                         index = x * 3 + (y * stride)
                         cameraImageArray(x, y) = pixels(index + 2) * 256 'R and B are reversed
                         cameraImageArray(x + 1, y + 1) = pixels(index) * 256 'R and B are reversed
@@ -1155,8 +1162,8 @@ Public Class Camera
             Else
                 Dim pixels(bitmapSource.PixelHeight * stride) As Byte
                 bitmapSource.CopyPixels(pixels, stride, 0)
-                For y = 0 To (cameraNumY - 2)
-                    For x = 0 To (cameraNumX - 2)
+                For y = 0 To (imgH - 2)
+                    For x = 0 To (imgW - 2)
                         index = x * 3 + (y * stride)
                         cameraImageArray(x, y) = pixels(index + 2) * 256 'R 
                         cameraImageArray(x + 1, y + 1) = pixels(index) * 256 'B 
@@ -1373,8 +1380,11 @@ Public Class Camera
     Private Shared Function NumberPix() As String
         Dim response As String = SendLumixMessage(NUMPIX)
         Dim doc As XElement = XElement.Parse(response)
-        If doc...<total_content_number>.Value Then
-            Return doc...<total_content_number>.Value
+        ' Return the count text if present. Was 'If <element>.Value Then' which does
+        ' a CBool on the XML text and throws InvalidCastException on a numeric/empty value.
+        Dim total As String = doc...<total_content_number>.Value
+        If Not String.IsNullOrEmpty(total) Then
+            Return total
         End If
         Return ""
     End Function
@@ -1488,12 +1498,13 @@ Public Class Camera
 
     Public Sub StartExposure(Duration As Double, Light As Boolean) Implements ICameraV2.StartExposure
         If (Duration < 0.0) Then Throw New InvalidValueException("StartExposure", Duration.ToString(), "0.0 upwards")
-        If (cameraNumX > ccdWidth) Then Throw New InvalidValueException("StartExposure", cameraNumX.ToString(), ccdWidth.ToString())
-        If (cameraNumY > ccdHeight) Then Throw New InvalidValueException("StartExposure", cameraNumY.ToString(), ccdHeight.ToString())
+        If (cameraStartX + cameraNumX > ccdWidth) Then Throw New InvalidValueException("StartExposure", cameraNumX.ToString(), ccdWidth.ToString())
+        If (cameraStartY + cameraNumY > ccdHeight) Then Throw New InvalidValueException("StartExposure", cameraNumY.ToString(), ccdHeight.ToString())
         If (cameraStartX > ccdWidth) Then Throw New InvalidValueException("StartExposure", cameraStartX.ToString(), ccdWidth.ToString())
         If (cameraStartY > ccdHeight) Then Throw New InvalidValueException("StartExposure", cameraStartY.ToString(), ccdHeight.ToString())
 
         cameraImageReady = False
+        cameraAborted = False
         cameraLastExposureDuration = Duration
         exposureStart = DateTime.Now
         SendLumixMessage(RECMODE) 'makes sure it is not in playmode...
@@ -1594,6 +1605,10 @@ Public Class Camera
         Dim buflen As Integer = 1024
 
         cameraImageReady = False
+        If cameraAborted Then ' aborted during the exposure wait - don't download
+            CurrentState = CameraStates.cameraIdle
+            Exit Sub
+        End If
         Pictures = New XmlDocument
         Dim PictureString As String
         Dim LookupImgtag As String = ""
@@ -1687,7 +1702,7 @@ Public Class Camera
                 Try
                     Do
                         Dim readBytes(buflen - 1) As Byte
-                        CurrentPercentCompleted = Math.Min(100 * nRead / 8000000, 100) 'assuming a jpg is not longer than 8MB
+                        CurrentPercentCompleted = Math.Min(nRead \ 80000, 100) 'assuming a jpg is not longer than 8MB (nRead\80000 avoids the Int32 overflow of 100*nRead on >21MB RAW)
                         bytesread = theResponse.GetResponseStream.Read(readBytes, 0, buflen)
 
                         nRead = nRead + bytesread
@@ -1777,13 +1792,27 @@ Public Class Camera
             TL.LogMessage("error in reading image", "error in reading image")
             cameraImageReady = False
             TL.LogMessage("Imageready", "False")
-            CurrentState = CameraStates.cameraIdle
+            ' Surface the failure as cameraError (was cameraIdle) so a client polling
+            ' CameraState sees the error instead of hanging on ImageReady=False.
+            CurrentState = CameraStates.cameraError
             Exit Sub
         End Try
 
-        CurrentState = CameraStates.cameraIdle
-        cameraImageReady = True
-        TL.LogMessage("Imageready", "true")
+        If cameraAborted Then ' aborted while downloading/converting - don't hand back an image
+            cameraImageReady = False
+            CurrentState = CameraStates.cameraIdle
+            TL.LogMessage("Imageready", "False (aborted)")
+        ElseIf Not String.IsNullOrEmpty(TiffFileName) AndAlso IO.File.Exists(TiffFileName) Then
+            CurrentState = CameraStates.cameraIdle
+            cameraImageReady = True
+            TL.LogMessage("Imageready", "true")
+        Else
+            ' Conversion failed (no TIFF): don't report ImageReady=True and then throw
+            ' FileNotFound from ImageArray - report the error state instead.
+            cameraImageReady = False
+            CurrentState = CameraStates.cameraError
+            TL.LogMessage("Imageready", "False (no TIFF produced)")
+        End If
 
     End Sub
 
