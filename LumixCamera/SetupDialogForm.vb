@@ -1,7 +1,12 @@
 Imports System.IO
 Imports System.Net
+Imports System.Net.Sockets
 Imports System.Data
 Imports System.Net.NetworkInformation
+Imports System.Text
+Imports System.Threading
+Imports System.Threading.Tasks
+Imports System.Collections.Concurrent
 Imports System.Xml
 Imports System.Xml.Linq
 Imports System.Linq
@@ -10,15 +15,30 @@ Imports System.Linq
 Public Class SetupDialogForm
 
     Private Sub OK_Button_Click(ByVal sender As System.Object, ByVal e As System.EventArgs) Handles OK_Button.Click ' OK button event handler
-        If Camera.IPAddress IsNot Camera.IPAddressDefault Then
-            Camera.SendLumixMessage(Camera.ISO + CBISO.SelectedItem)
+        ' Flush any pending data-bindings (e.g. CBReadoutMode -> TransferFormat) before reading the controls.
+        Me.Validate()
+
+        ' Commit the selected IP straight from the dropdown. Relying on the
+        ' SelectedIndexChanged handler alone loses a pre-filled value on first
+        ' connect, because that event does not fire for a programmatic selection.
+        If CBCameraIPAddress.SelectedItem IsNot Nothing Then
+            Camera.IPAddress = CBCameraIPAddress.SelectedItem.ToString()
+        End If
+
+        ' Value comparison ('IsNot' compared string references, not their contents).
+        If Camera.IPAddress <> Camera.IPAddressDefault Then
+            If CBISO.SelectedItem IsNot Nothing Then
+                Camera.SendLumixMessage(Camera.ISO + CBISO.SelectedItem.ToString())
+            End If
             Camera.SendLumixMessage(Camera.SHUTTERSPEED + Camera.ShutterTable(CBShutterSpeed.SelectedIndex, 0))
             Camera.SendLumixMessage(Camera.QUALITY + "raw_fine") 'that way we get all the format all the time. drawback is that the SD cards has now both RAW+JPG
-
-
         End If
-        My.Settings.Resolution = CBResolution.SelectedItem.ToString()
-        My.Settings.ISO = CBISO.SelectedItem.ToString()
+
+        ' Persist every setting straight from the controls so a pre-filled value
+        ' is honoured even when the user never re-selects it from the dropdown.
+        If CBResolution.SelectedItem IsNot Nothing Then My.Settings.Resolution = CBResolution.SelectedItem.ToString()
+        If CBISO.SelectedItem IsNot Nothing Then My.Settings.ISO = CBISO.SelectedItem.ToString()
+        If CBReadoutMode.SelectedItem IsNot Nothing Then My.Settings.TransferFormat = CBReadoutMode.SelectedItem.ToString()
         My.Settings.IPAddress = Camera.IPAddress
         My.Settings.TempPath = TBTempPath.Text
         Me.DialogResult = System.Windows.Forms.DialogResult.OK
@@ -144,6 +164,179 @@ Public Class SetupDialogForm
         Return all
     End Function
 
+    ''' <summary>
+    ''' Discover candidate camera IPs robustly, independent of the (often stale)
+    ''' ARP cache. Sources, unioned with confirmed cameras listed first:
+    '''   1) an active parallel probe of every local /24 that hits the Lumix
+    '''      cam.cgi capability endpoint (firewall- and ARP-tolerant),
+    '''   2) SSDP M-SEARCH across all interfaces (the camera is a UPnP MediaServer),
+    '''   3) the Windows ARP table (previous behaviour, kept as a fallback source).
+    ''' </summary>
+    Public Shared Function DiscoverLumixCameras() As List(Of IPAddress)
+        Dim candidates As New HashSet(Of String)()
+
+        ' Source 2 + 3: SSDP responders and the ARP table (best-effort). Keep only
+        ' real unicast host addresses (drops multicast/broadcast ARP entries).
+        Try
+            For Each ip As String In DiscoverViaSsdp(1000)
+                AddIfUsable(candidates, ip)
+            Next
+        Catch
+        End Try
+        Try
+            For Each ip As IPAddress In GetAllDevicesOnLAN().Keys
+                AddIfUsable(candidates, ip.ToString())
+            Next
+        Catch
+        End Try
+
+        ' Source 1: sweep every local /24 (plus everything found above) and keep
+        ' only hosts that actually answer the Lumix control API.
+        Dim targets As New HashSet(Of String)(candidates)
+        For Each localIp As IPAddress In GetLocalIPv4Addresses()
+            If Not IsSweepablePrivate(localIp) Then Continue For
+            Dim octets() As String = localIp.ToString().Split("."c)
+            If octets.Length <> 4 Then Continue For
+            Dim prefix As String = String.Join(".", octets(0), octets(1), octets(2)) & "."
+            For host As Integer = 1 To 254
+                targets.Add(prefix & host)
+            Next
+        Next
+
+        ' Blocking connect probes starve on thread-pool injection throttling, so
+        ' raise the floor to let the sweep actually run wide (restored afterwards).
+        Dim minW As Integer, minIo As Integer
+        ThreadPool.GetMinThreads(minW, minIo)
+        ThreadPool.SetMinThreads(Math.Max(minW, 256), Math.Max(minIo, 256))
+        Dim confirmed As New ConcurrentBag(Of String)()
+        Try
+            Parallel.ForEach(targets, New ParallelOptions With {.MaxDegreeOfParallelism = 256},
+                Sub(ip As String)
+                    If IsLumixCamera(ip, 500) Then confirmed.Add(ip)
+                End Sub)
+        Catch
+        Finally
+            ThreadPool.SetMinThreads(minW, minIo)
+        End Try
+
+        ' Confirmed cameras first, then any other known candidate.
+        Dim result As New List(Of IPAddress)()
+        Dim seen As New HashSet(Of String)()
+        For Each ip As String In confirmed
+            Dim parsed As IPAddress = Nothing
+            If seen.Add(ip) AndAlso IPAddress.TryParse(ip, parsed) Then result.Add(parsed)
+        Next
+        For Each ip As String In candidates
+            Dim parsed As IPAddress = Nothing
+            If seen.Add(ip) AndAlso IPAddress.TryParse(ip, parsed) Then result.Add(parsed)
+        Next
+        Return result
+    End Function
+
+    ''' <summary>Add an address to the set only if it is a real unicast host.</summary>
+    Private Shared Sub AddIfUsable(bag As HashSet(Of String), ip As String)
+        Dim parsed As IPAddress = Nothing
+        If IPAddress.TryParse(ip, parsed) AndAlso IsUsableHostAddress(parsed) Then bag.Add(parsed.ToString())
+    End Sub
+
+    ''' <summary>Exclude multicast (224-239), reserved (>=240), and .0/.255 addresses.</summary>
+    Private Shared Function IsUsableHostAddress(ip As IPAddress) As Boolean
+        Dim b() As Byte = ip.GetAddressBytes()
+        If b.Length <> 4 Then Return False
+        If b(0) = 0 OrElse b(0) >= 224 Then Return False
+        If b(3) = 0 OrElse b(3) = 255 Then Return False
+        Return True
+    End Function
+
+    ''' <summary>True if the host answers the Lumix cam.cgi capability endpoint.</summary>
+    Private Shared Function IsLumixCamera(ip As String, timeoutMs As Integer) As Boolean
+        ' Fast TCP:80 gate first so dead addresses don't cost a full HTTP timeout.
+        Try
+            Using tcp As New TcpClient()
+                Dim ar As IAsyncResult = tcp.BeginConnect(ip, 80, Nothing, Nothing)
+                If Not ar.AsyncWaitHandle.WaitOne(timeoutMs) Then Return False
+                tcp.EndConnect(ar)
+            End Using
+        Catch
+            Return False
+        End Try
+        Try
+            Dim req As HttpWebRequest = CType(WebRequest.Create("http://" & ip & "/" & Camera.CAPABILITY), HttpWebRequest)
+            req.Timeout = timeoutMs
+            Using resp As HttpWebResponse = CType(req.GetResponse(), HttpWebResponse)
+                Using sr As New StreamReader(resp.GetResponseStream())
+                    Dim body As String = sr.ReadToEnd()
+                    Return body.Contains("camrply") OrElse body.Contains("contents_action_info") OrElse body.Contains("productinfo")
+                End Using
+            End Using
+        Catch
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>All operational, non-loopback IPv4 addresses on this host.</summary>
+    Private Shared Function GetLocalIPv4Addresses() As List(Of IPAddress)
+        Dim addrs As New List(Of IPAddress)()
+        For Each ni As NetworkInterface In NetworkInterface.GetAllNetworkInterfaces()
+            If ni.OperationalStatus <> OperationalStatus.Up Then Continue For
+            If ni.NetworkInterfaceType = NetworkInterfaceType.Loopback Then Continue For
+            For Each ua As UnicastIPAddressInformation In ni.GetIPProperties().UnicastAddresses
+                If ua.Address.AddressFamily = AddressFamily.InterNetwork Then addrs.Add(ua.Address)
+            Next
+        Next
+        Return addrs
+    End Function
+
+    ''' <summary>
+    ''' Sweep only RFC1918 LAN ranges (10/8, 172.16-31/12, 192.168/16). Excludes
+    ''' Tailscale CGNAT (100.64/10) and other non-LAN interfaces so we never try
+    ''' to enumerate a huge or irrelevant address space.
+    ''' </summary>
+    Private Shared Function IsSweepablePrivate(ip As IPAddress) As Boolean
+        Dim b() As Byte = ip.GetAddressBytes()
+        If b.Length <> 4 Then Return False
+        If b(0) = 10 Then Return True
+        If b(0) = 172 AndAlso b(1) >= 16 AndAlso b(1) <= 31 Then Return True
+        If b(0) = 192 AndAlso b(1) = 168 Then Return True
+        Return False
+    End Function
+
+    ''' <summary>SSDP M-SEARCH from every interface; returns responder IPs.</summary>
+    Private Shared Function DiscoverViaSsdp(timeoutMs As Integer) As HashSet(Of String)
+        Dim found As New HashSet(Of String)()
+        Dim mcast As New IPEndPoint(IPAddress.Parse("239.255.255.250"), 1900)
+        Dim msg As String =
+            "M-SEARCH * HTTP/1.1" & vbCrLf &
+            "HOST: 239.255.255.250:1900" & vbCrLf &
+            "MAN: ""ssdp:discover""" & vbCrLf &
+            "MX: 1" & vbCrLf &
+            "ST: urn:schemas-upnp-org:device:MediaServer:1" & vbCrLf & vbCrLf
+        Dim payload() As Byte = Encoding.ASCII.GetBytes(msg)
+        For Each localIp As IPAddress In GetLocalIPv4Addresses()
+            Dim client As UdpClient = Nothing
+            Try
+                client = New UdpClient(New IPEndPoint(localIp, 0))
+                client.Client.ReceiveTimeout = timeoutMs
+                client.Send(payload, payload.Length, mcast)
+                client.Send(payload, payload.Length, mcast) ' UDP: repeat, datagrams can be lost
+                Dim deadline As DateTime = DateTime.UtcNow.AddMilliseconds(timeoutMs)
+                While DateTime.UtcNow < deadline
+                    Try
+                        Dim rep As New IPEndPoint(IPAddress.Any, 0)
+                        client.Receive(rep)
+                        found.Add(rep.Address.ToString())
+                    Catch
+                        Exit While ' receive timed out
+                    End Try
+                End While
+            Catch
+            Finally
+                If client IsNot Nothing Then client.Close()
+            End Try
+        Next
+        Return found
+    End Function
+
 
     Private Sub Cancel_Button_Click(ByVal sender As System.Object, ByVal e As System.EventArgs) Handles Cancel_Button.Click 'Cancel button event handler
         Me.DialogResult = System.Windows.Forms.DialogResult.Cancel
@@ -207,13 +400,19 @@ Public Class SetupDialogForm
         Dim CameraFound As Boolean = False
         Dim CameraConnected As Boolean = False
 
-        Dim IPValues As New List(Of IPAddress)(GetAllDevicesOnLAN().Keys)
+        ' Robust discovery: confirmed Lumix cameras first (active cam.cgi sweep +
+        ' SSDP), then other LAN devices. No longer depends on the stale ARP cache.
+        Dim IPValues As List(Of IPAddress) = DiscoverLumixCameras()
         CBCameraIPAddress.Items.Clear()
         CBCameraIPAddress.DataSource = New BindingSource(IPValues, Nothing)
-        ' select the current IPAddress if possible
-        If CBCameraIPAddress.Items.Contains(Camera.IPAddress) Then
-            CBCameraIPAddress.SelectedItem = Camera.IPAddress
-        End If
+        ' Pre-select the saved IP. Items are IPAddress objects while Camera.IPAddress
+        ' is a String, so match on the text form (Items.Contains(String) never matched).
+        For Each addr As IPAddress In IPValues
+            If addr.ToString() = Camera.IPAddress Then
+                CBCameraIPAddress.SelectedItem = addr
+                Exit For
+            End If
+        Next
 
         'trying to connect to the Lumix Cam
         For Each TryIPValue As IPAddress In IPValues
@@ -246,7 +445,13 @@ Public Class SetupDialogForm
                                 Camera.MODEL = el.@model
                                 Label8.Text = el.@model
                                 '                        CBResolution.SelectedItem = Camera.Models(Camera.MODEL)
-                                CBResolution.SelectedIndex = CBResolution.FindString(Camera.Models(Camera.MODEL).ToString)
+                                ' Unlisted bodies (e.g. FZ82) are not in Models -> guard the
+                                ' NullReference that ToString() would throw and just leave the
+                                ' resolution at its current selection.
+                                Dim knownRes As Object = Camera.Models(Camera.MODEL)
+                                If knownRes IsNot Nothing Then
+                                    CBResolution.SelectedIndex = CBResolution.FindString(knownRes.ToString())
+                                End If
 
                                 CameraFound = True
                             Next
@@ -297,11 +502,12 @@ Public Class SetupDialogForm
 
 
     Private Sub CameraIPAddress_SelectedIndexChanged(sender As Object, e As EventArgs) Handles CBCameraIPAddress.SelectedIndexChanged
-        Camera.IPAddress = CBCameraIPAddress.SelectedItem.ToString
+        ' Fires with SelectedItem = Nothing during the Items.Clear()/DataSource reset in InitUI.
+        If CBCameraIPAddress.SelectedItem IsNot Nothing Then Camera.IPAddress = CBCameraIPAddress.SelectedItem.ToString()
     End Sub
 
     Private Sub CameraIPAddress_ValueMemberChanged(sender As Object, e As EventArgs) Handles CBCameraIPAddress.ValueMemberChanged
-        Camera.IPAddress = CBCameraIPAddress.SelectedItem.ToString
+        If CBCameraIPAddress.SelectedItem IsNot Nothing Then Camera.IPAddress = CBCameraIPAddress.SelectedItem.ToString()
     End Sub
 
     Private Sub ButtonTemp_Click(sender As Object, e As EventArgs) Handles ButtonTemp.Click

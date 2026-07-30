@@ -313,7 +313,7 @@ Public Class Camera
     '        {"16384/256", "B"}
     '}
 
-    Public Shared ResolutionTable = {"10.2", "12.1", "16.0", "16.05", "20.0", "20.3", "24.2", "47.3", "25.2", "20.1"}
+    Public Shared ResolutionTable = {"10.2", "12.1", "16.0", "16.05", "20.0", "20.3", "24.2", "47.3", "25.2", "20.1", "44.3"}
 
 
     '
@@ -403,6 +403,31 @@ Public Class Camera
             Models.Add("G100", "20.3")
             Models.Add("FZ1000", "20.1")
 
+            ' 2023-2025 bodies. Keys are the cam.cgi model string (Panasonic "DC-"
+            ' prefix stripped, matching the entries above). Both the "M2" and "II"
+            ' spellings are registered because the exact string a body reports is
+            ' not confirmed for all of them; a wrong key is harmless (the connect
+            ' path falls back to a default resolution rather than crashing).
+            '   24.2MP full-frame sensor (S5II family / S9 / S1II / BS1H)
+            Models.Add("S5M2", "24.2") : Models.Add("S5II", "24.2")    ' S5 II
+            Models.Add("S5M2X", "24.2") : Models.Add("S5IIX", "24.2")  ' S5 IIX
+            Models.Add("S9", "24.2")
+            Models.Add("S1M2", "24.2") : Models.Add("S1II", "24.2")    ' S1 II (24.1MP)
+            Models.Add("S1M2E", "24.2") : Models.Add("S1IIE", "24.2")  ' S1 IIE
+            Models.Add("BS1H", "24.2")
+            '   25.2MP Micro Four Thirds sensor (G9 II / GH7)
+            Models.Add("G9M2", "25.2") : Models.Add("G9II", "25.2")    ' G9 II
+            Models.Add("GH7", "25.2")
+            '   44.3MP full-frame sensor (S1R II) - dims from digicamdb
+            Models.Add("S1RM2", "44.3") : Models.Add("S1RII", "44.3")  ' S1R II
+            '   20.3MP Micro Four Thirds bodies previously missing from the list
+            Models.Add("GH5M2", "20.3") : Models.Add("GH5II", "20.3")  ' GH5 II
+            Models.Add("G110", "20.3")
+            Models.Add("G100D", "20.3")
+            ' NOTE: FZ82/FZ80 (issue #8) is an 18.1MP 1/2.3" bridge compact - it
+            ' needs its own resolution bucket and sensor size, not added here; its
+            ' crash-on-select is handled by the connect-path guard regardless.
+
         End If
         '"10.2", "12.1", "16.0", "16.05", "20.0", "20.3", "24.2", "47.3"
 
@@ -451,6 +476,10 @@ Public Class Camera
         Resolutions(9)._Y = 4354
 
 
+        Resolutions(10)._resolution = "44.3" ' S1R II full sensor resolution
+        Resolutions(10)._X = 8151
+        Resolutions(10)._Y = 5434
+
         ResolutionsJPG(0)._resolution = "12.1"
         ResolutionsJPG(0)._X = 3991
         ResolutionsJPG(0)._Y = 2998
@@ -493,6 +522,10 @@ Public Class Camera
         ResolutionsJPG(9)._Y = 4336
 
 
+        ResolutionsJPG(10)._resolution = "44.3" ' S1R II max image resolution
+        ResolutionsJPG(10)._X = 8144
+        ResolutionsJPG(10)._Y = 5424
+
         ResolutionsThumb(0)._resolution = "12.1"
         ResolutionsThumb(0)._X = 1440
         ResolutionsThumb(0)._Y = 1080
@@ -534,6 +567,10 @@ Public Class Camera
         ResolutionsThumb(9)._X = 1440
         ResolutionsThumb(9)._Y = 1080
 
+        ResolutionsThumb(10)._resolution = "44.3"
+        ResolutionsThumb(10)._X = 1440
+        ResolutionsThumb(10)._Y = 1080
+
 
         'TODO: Implement your additional construction here
 
@@ -562,10 +599,13 @@ Public Class Camera
             Dim result As System.Windows.Forms.DialogResult = F.ShowDialog()
             If result = DialogResult.OK Then
                 My.Settings.Save()
+                ' Only connect when the user accepted the dialog. Previously this ran
+                ' unconditionally, so cancelling (or just opening Properties with no IP
+                ' set) forced a connect + started the poll thread as a side effect.
+                Connected = True
             Else
                 My.Settings.Reload()
             End If
-            Connected = True
         End Using
     End Sub
 
@@ -624,6 +664,7 @@ Public Class Camera
                 TempPath = My.Settings.TempPath
                 CurrentSpeed = My.Settings.Speed
                 ReadoutMode = ROMAL.IndexOf(My.Settings.TransferFormat)
+                If ReadoutMode < 0 Then ReadoutMode = 1 ' default to RAW when TransferFormat is unset/invalid (else sensor size stays 0)
                 Gain = Math.Max(0, ISOTableAL.IndexOf(My.Settings.ISO))
                 SendLumixMessage(SHUTTERSPEED + CurrentSpeed)
                 If Camera.MODEL.Contains("S1") Then 'full frame bodies.
@@ -632,7 +673,17 @@ Public Class Camera
                 End If
 
                 Dim index As Integer = Array.FindIndex(Resolutions, Function(f) f._resolution = My.Settings.Resolution)
-
+                If index < 0 Then
+                    ' Resolution not set/matched (e.g. connected from SharpCap without
+                    ' opening the setup dialog, or an unlisted body such as FZ82). Fall
+                    ' back to the model's known resolution, then to the first entry, so
+                    ' the arrays below are never indexed with -1 (previously a hard crash).
+                    Dim modelRes As String = TryCast(Models(MODEL), String)
+                    If Not String.IsNullOrEmpty(modelRes) Then
+                        index = Array.FindIndex(Resolutions, Function(f) f._resolution = modelRes)
+                    End If
+                    If index < 0 Then index = 0
+                End If
 
                 Select Case ReadoutMode
                     Case 0 'jpg
@@ -1443,11 +1494,15 @@ Public Class Camera
 
     'formats a message to be sent to the maera
     Public Shared Function SendLumixMessage(LumixMessage As String) As String
+        ' No IP configured yet (e.g. a host connected without opening setup):
+        ' don't build an invalid "http:///..." URI, which throws an *uncaught*
+        ' UriFormatException. Just no-op with an empty response.
+        If String.IsNullOrEmpty(Camera.IPAddress) Then Return ""
         Dim request = WebRequest.Create("http://" + Camera.IPAddress + "/" + LumixMessage)
         Dim myStreamReader As StreamReader
         Dim SendStatus As Integer = -1
         Dim statusCode As HttpStatusCode
-        Dim ResponseText As String
+        Dim ResponseText As String = ""
         Try
             Dim myWebResponse = CType(request.GetResponse(), HttpWebResponse)
             myStreamReader = New StreamReader(myWebResponse.GetResponseStream())
@@ -1475,6 +1530,9 @@ Public Class Camera
                 End Using
             End If
         End Try
+        ' Always return a string (never Nothing) so callers doing .Contains(...) /
+        ' XElement.Parse(...) on the result don't hit a NullReferenceException.
+        Return ResponseText
     End Function
 
 
