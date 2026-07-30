@@ -51,7 +51,7 @@ To connect your PC to the camera:
 	4.	set the ISO, Speed and TransferFormat (JPG, Thumb or Raw): read below for details  
 	6.	Temp folder to store the files from the camera.   
 	8.	Hit ok.  
-	10.	The Astro Software then gets data from the driver like the pixel pitch but does not get the temperature… in your Astro Software you can then set the Bulb seconds of the capture the gain etc. 
+	10.	The Astro Software then gets data from the driver like the pixel pitch but does not get the temperatureï¿½ in your Astro Software you can then set the Bulb seconds of the capture the gain etc. 
 	![](./readme_files/image007.png)
 	11. You can now shoot!
 	![](./readme_files/image017.png)  
@@ -96,6 +96,20 @@ not used anymore:
  MedallionScript: https://github.com/madelson/MedallionShell
 
 the lumix Wifi interface protocol is heavily discussed here: https://www.personal-view.com/talks/discussion/6703/control-your-gh3-from-a-web-browser-now-with-video-/p1
+
+# Adding a camera / resolution
+The known-camera and sensor-resolution tables live in **`cameras.json`**, installed next to the driver DLL. To add a body or fix a resolution, edit that file â€” no rebuild required:
+
+```json
+{
+  "resolutions": [
+    { "class": "24.2", "rawX": 6026, "rawY": 4017, "jpgX": 6000, "jpgY": 4000 }
+  ],
+  "models": { "S5M2": "24.2", "S9": "24.2" }
+}
+```
+
+Each `models` entry maps the camera's reported model string to a `resolutions` `class`. The driver ships an embedded copy as a fallback, so it still works if the file is missing.
 
 # License
 Copyright (c) 2019 < robert hasson robert_hasson@yahoo.com>
