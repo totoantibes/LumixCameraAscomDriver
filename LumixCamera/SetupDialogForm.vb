@@ -10,16 +10,16 @@ Imports System.Linq
 Public Class SetupDialogForm
 
     Private Sub OK_Button_Click(ByVal sender As System.Object, ByVal e As System.EventArgs) Handles OK_Button.Click ' OK button event handler
-        If Camera.IPAddress IsNot Camera.IPAddressDefault Then
-            Camera.SendLumixMessage(Camera.ISO + CBISO.SelectedItem)
-            Camera.SendLumixMessage(Camera.SHUTTERSPEED + Camera.ShutterTable(CBShutterSpeed.SelectedIndex, 0))
-            Camera.SendLumixMessage(Camera.QUALITY + "raw_fine") 'that way we get all the format all the time. drawback is that the SD cards has now both RAW+JPG
+        If cam.IPAddress IsNot Camera.IPAddressDefault Then
+            cam.SendLumixMessage(Camera.ISO + CBISO.SelectedItem)
+            cam.SendLumixMessage(Camera.SHUTTERSPEED + Camera.ShutterTable(CBShutterSpeed.SelectedIndex, 0))
+            cam.SendLumixMessage(Camera.QUALITY + "raw_fine") 'that way we get all the format all the time. drawback is that the SD cards has now both RAW+JPG
 
 
         End If
         My.Settings.Resolution = CBResolution.SelectedItem.ToString()
         My.Settings.ISO = CBISO.SelectedItem.ToString()
-        My.Settings.IPAddress = Camera.IPAddress
+        My.Settings.IPAddress = cam.IPAddress
         My.Settings.TempPath = TBTempPath.Text
         Me.DialogResult = System.Windows.Forms.DialogResult.OK
         Me.Close()
@@ -41,10 +41,15 @@ Public Class SetupDialogForm
     ''' </summary>
     Const ERROR_INSUFFICIENT_BUFFER As Integer = 122
 
-    Public Sub New()
+    ' The Camera driver instance this dialog configures — used for the per-instance
+    ' state (IPAddress, MODEL, SendLumixMessage) that is no longer Shared.
+    Private ReadOnly cam As Camera
+
+    Public Sub New(cameraInstance As Camera)
 
         ' This call is required by the designer.
         InitializeComponent()
+        cam = cameraInstance
 
         ' Add any initialization after the InitializeComponent() call.
         CBResolution.DataSource = New BindingSource(Camera.ResolutionTable, Nothing)
@@ -211,8 +216,8 @@ Public Class SetupDialogForm
         CBCameraIPAddress.Items.Clear()
         CBCameraIPAddress.DataSource = New BindingSource(IPValues, Nothing)
         ' select the current IPAddress if possible
-        If CBCameraIPAddress.Items.Contains(Camera.IPAddress) Then
-            CBCameraIPAddress.SelectedItem = Camera.IPAddress
+        If CBCameraIPAddress.Items.Contains(cam.IPAddress) Then
+            CBCameraIPAddress.SelectedItem = cam.IPAddress
         End If
 
         'trying to connect to the Lumix Cam
@@ -226,7 +231,7 @@ Public Class SetupDialogForm
                 If myWebResponse.StatusCode = HttpStatusCode.Accepted Or myWebResponse.StatusCode = 200 Then
                     SendStatus = 1 'message sent successfully
                     CBCameraIPAddress.SelectedItem = TryIPValue
-                    Camera.IPAddress = TryIPValue.ToString
+                    cam.IPAddress = TryIPValue.ToString
                     myStreamReader = New StreamReader(myWebResponse.GetResponseStream())
                     Using (myStreamReader)
                         ResponseText = myStreamReader.ReadToEnd
@@ -243,10 +248,10 @@ Public Class SetupDialogForm
                             From El In Capabilities.<contents_action_info>
                             Select El
                             For Each el As XElement In Capability
-                                Camera.MODEL = el.@model
+                                cam.MODEL = el.@model
                                 Label8.Text = el.@model
-                                '                        CBResolution.SelectedItem = Camera.Models(Camera.MODEL)
-                                CBResolution.SelectedIndex = CBResolution.FindString(Camera.Models(Camera.MODEL).ToString)
+                                '                        CBResolution.SelectedItem = Camera.Models(cam.MODEL)
+                                CBResolution.SelectedIndex = CBResolution.FindString(Camera.Models(cam.MODEL).ToString)
 
                                 CameraFound = True
                             Next
@@ -256,7 +261,7 @@ Public Class SetupDialogForm
                                 Dim modelName As String = xml.<productinfo>.<modelname>.FirstOrDefault()?.Value
 
                                 If Not String.IsNullOrEmpty(modelName) Then
-                                    Camera.MODEL = modelName
+                                    cam.MODEL = modelName
                                     Label8.Text = modelName
                                     CameraFound = True
                                 End If
@@ -297,11 +302,11 @@ Public Class SetupDialogForm
 
 
     Private Sub CameraIPAddress_SelectedIndexChanged(sender As Object, e As EventArgs) Handles CBCameraIPAddress.SelectedIndexChanged
-        Camera.IPAddress = CBCameraIPAddress.SelectedItem.ToString
+        cam.IPAddress = CBCameraIPAddress.SelectedItem.ToString
     End Sub
 
     Private Sub CameraIPAddress_ValueMemberChanged(sender As Object, e As EventArgs) Handles CBCameraIPAddress.ValueMemberChanged
-        Camera.IPAddress = CBCameraIPAddress.SelectedItem.ToString
+        cam.IPAddress = CBCameraIPAddress.SelectedItem.ToString
     End Sub
 
     Private Sub ButtonTemp_Click(sender As Object, e As EventArgs) Handles ButtonTemp.Click

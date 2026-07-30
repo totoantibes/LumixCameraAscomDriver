@@ -112,7 +112,9 @@ Public Class Camera
 
 
     '----- Lumix constants ------
-    Public Shared MODEL As String = "LUMIX"
+    ' Per-connection state — instance, NOT Shared, so two Camera objects in one
+    ' process don't clobber each other's IP / model / settings.
+    Public MODEL As String = "LUMIX"
 
     '----- HTTP ------------
     Private ReadOnly USER_AGENT As String = "Mozilla/5.0"
@@ -166,8 +168,8 @@ Public Class Camera
 
 
     Friend Shared traceState As Boolean
-    Public Shared TransferFormat As String
-    Friend Shared IPAddress As String
+    Public TransferFormat As String
+    Friend IPAddress As String
 
     Private connectedState As Boolean ' Private variable to hold the connected state
     Private utilities As Util ' Private variable to hold an ASCOM Utilities object
@@ -176,7 +178,7 @@ Public Class Camera
     Private TiffFileName As String
 
     Friend Shared DCrawPath As String '= "C:\Users\robert.hasson\source\repos\LumixCamera\packages\NDCRaw.0.5.2\lib\net461\dcraw-9.27-ms-64-bit.exe"
-    Friend Shared TempPath As String '= "C:\Users\robert.hasson\Documents\XMLLumix\"
+    Friend TempPath As String '= "C:\Users\robert.hasson\Documents\XMLLumix\"
     Friend Shared IPAddressDefault As String = "localhost"
     '  Public Shared outputarray As New NDCRaw.DCRawResult
     Public ROM = {"JPG", "RAW", "Thumb"}
@@ -184,9 +186,9 @@ Public Class Camera
     Public ROMAL As New ArrayList
     Public ISOTableAL As New ArrayList
     Public Shared Models As New Hashtable
-    Public Shared CurrentROM As UShort
-    Public Shared CurrentISO As UShort
-    Public Shared CurrentSpeed As String
+    Public CurrentROM As UShort
+    Public CurrentISO As UShort
+    Public CurrentSpeed As String
     Private CurrentState As CameraStates = CameraStates.cameraIdle
     Private CurrentPercentCompleted As Int32 = 0
 
@@ -558,7 +560,7 @@ Public Class Camera
         '    System.Windows.Forms.MessageBox.Show("Already connected, just press OK")
         'End If
 
-        Using F As SetupDialogForm = New SetupDialogForm()
+        Using F As SetupDialogForm = New SetupDialogForm(Me)
             Dim result As System.Windows.Forms.DialogResult = F.ShowDialog()
             If result = DialogResult.OK Then
                 My.Settings.Save()
@@ -626,7 +628,7 @@ Public Class Camera
                 ReadoutMode = ROMAL.IndexOf(My.Settings.TransferFormat)
                 Gain = Math.Max(0, ISOTableAL.IndexOf(My.Settings.ISO))
                 SendLumixMessage(SHUTTERSPEED + CurrentSpeed)
-                If Camera.MODEL.Contains("S1") Then 'full frame bodies.
+                If MODEL.Contains("S1") Then 'full frame bodies.
                     sensormmx = 36
                     sensormmy = 24
                 End If
@@ -941,7 +943,7 @@ Public Class Camera
 
     Public ReadOnly Property ExposureMax() As Double Implements ICameraV2.ExposureMax
         Get
-            If Camera.MODEL = "G80" Then
+            If MODEL = "G80" Then
                 TL.LogMessage("ExposureMax Get", "120 secs  this is true for G80 only") 'this is true for G80 only
                 Return (120)
             Else
@@ -1343,8 +1345,8 @@ Public Class Camera
 
     Public ReadOnly Property SensorName() As String Implements ICameraV2.SensorName
         Get
-            TL.LogMessage("SensorName Get", "Panasonic Lumix" + Camera.MODEL)
-            Return "Panasonic Lumix" + Camera.MODEL
+            TL.LogMessage("SensorName Get", "Panasonic Lumix" + MODEL)
+            Return "Panasonic Lumix" + MODEL
             'Throw New ASCOM.PropertyNotImplementedException("SensorName", False)
         End Get
     End Property
@@ -1370,7 +1372,7 @@ Public Class Camera
         End Set
     End Property
 
-    Private Shared Function NumberPix() As String
+    Private Function NumberPix() As String
         Dim response As String = SendLumixMessage(NUMPIX)
         Dim doc As XElement = XElement.Parse(response)
         If doc...<total_content_number>.Value Then
@@ -1384,7 +1386,7 @@ Public Class Camera
     'typically num is 1 but was useful to have it as a variable when building the dialogue
     'got some issues with dealing the various XML formats so in the end the response from the camerais turned into a string but inside it is an XML...
 
-    Private Shared Function GetPix(num As Int16) As String
+    Private Function GetPix(num As Int16) As String
         SendLumixMessage(PLAYMODE)
         Dim Start As Int16 = 0
         Dim NumPix As String = NumberPix()
@@ -1392,7 +1394,7 @@ Public Class Camera
         Dim Stream As System.IO.StreamWriter
         Dim HTTPReq As HttpWebRequest
 
-        HTTPReq = WebRequest.Create("http://" + Camera.IPAddress + CDS_Control)
+        HTTPReq = WebRequest.Create("http://" + IPAddress + CDS_Control)
         HTTPReq.ContentType = "text/xml; charset=""utf-8"""
         HTTPReq.Method = "POST"
         HTTPReq.Accept = "text/xml"
@@ -1442,8 +1444,8 @@ Public Class Camera
 
 
     'formats a message to be sent to the maera
-    Public Shared Function SendLumixMessage(LumixMessage As String) As String
-        Dim request = WebRequest.Create("http://" + Camera.IPAddress + "/" + LumixMessage)
+    Public Function SendLumixMessage(LumixMessage As String) As String
+        Dim request = WebRequest.Create("http://" + IPAddress + "/" + LumixMessage)
         Dim myStreamReader As StreamReader
         Dim SendStatus As Integer = -1
         Dim statusCode As HttpStatusCode
