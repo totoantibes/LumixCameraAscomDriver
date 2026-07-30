@@ -54,5 +54,65 @@ namespace ASCOM.Lumix.Usb
         internal static extern byte LMX_func_api_Close_Device(out uint retError);
 
         internal const uint CONNECT_VERSION = 0x00010001;
+
+        // ---- capture: PTP array sizes ----
+        internal const int USER_PTP_ARRAY_MAX = 512;
+        internal const int USER_PTP_STRING_MAX = 256;
+
+        // ---- event IDs (callback registration + dispatch) ----
+        internal const uint EV_ISO = 0x02000020;
+        internal const uint EV_SHUTTER = 0x02000030;
+        internal const uint EV_REC_CTRL_RELEASE = 0x03000010;
+        internal const uint EV_OBJCT_ADD = 0x10000040;
+        internal const uint EV_OBJCT_REQ_TRNSFER = 0x10000043;
+
+        // ---- Rec_Ctrl_Release tags ----
+        internal const uint TAG_RELEASE_ONESHOT = 0x03000011;
+        // Bulb tags (extended/Tether only; Phase 2): START 0x03000012, STOP 0x03000013, FINALIZE 0x03000019
+
+        // ---- object formats returned by Get_Object_FormatType ----
+        internal const uint OBJ_FORMAT_JPEG = 1;
+        internal const uint OBJ_FORMAT_RAW = 2;
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        internal struct LMX_STRUCT_PTP_FORM_ENUM_UInt32
+        {
+            public ushort NumOfVal;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = USER_PTP_ARRAY_MAX)] public int[] SupportVal;
+            public byte Available;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        internal struct LMX_STRUCT_REC_CTRL
+        {
+            public uint CtrlID;
+            public LMX_STRUCT_PTP_FORM_ENUM_UInt32 ParamData;
+        }
+
+        // typedef int (WINAPI* LMX_CALLBACK_FUNC)(UInt32 eventType, UInt32 eventParam) — StdCall.
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        internal delegate int LMX_CALLBACK_FUNC(uint param1, uint param2);
+
+        [DllImport(DLLNAME, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+        internal static extern uint LMX_func_api_Reg_NotifyCallback(uint callBackType, LMX_CALLBACK_FUNC appfunc);
+        [DllImport(DLLNAME, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+        internal static extern uint LMX_func_api_Delete_CallBackInfo(uint callBackType);
+
+        [DllImport(DLLNAME, ExactSpelling = true, CallingConvention = CC)]
+        internal static extern byte LMX_func_api_ISO_Set_Param(uint ulParam, out uint retError);
+        [DllImport(DLLNAME, ExactSpelling = true, CallingConvention = CC)]
+        internal static extern byte LMX_func_api_SS_Set_Param(long ulParam, out uint retError);
+
+        [DllImport(DLLNAME, ExactSpelling = true, CallingConvention = CC)]
+        internal static extern byte LMX_func_api_Rec_Ctrl_Release(ref LMX_STRUCT_REC_CTRL lpRecCtrl, out uint retError);
+
+        [DllImport(DLLNAME, ExactSpelling = true, CallingConvention = CC)]
+        internal static extern byte LMX_func_api_Get_Object_FormatType(uint objHandle, out uint pFormatType, out uint retError);
+        [DllImport(DLLNAME, ExactSpelling = true, CallingConvention = CC)]
+        internal static extern byte LMX_func_api_Get_Object_DataSize(uint objHandle, out uint pDataSize, out uint retError);
+        [DllImport(DLLNAME, ExactSpelling = true, CallingConvention = CC)]
+        internal static extern byte LMX_func_api_Get_Object(uint objectHandle, ref byte lpStoreBufAdder, uint storeBufSize, out uint retError);
+        [DllImport(DLLNAME, ExactSpelling = true, CallingConvention = CC)]
+        internal static extern byte LMX_func_api_Skip_Object_Transfer(uint objectHandle, out uint retError);
     }
 }

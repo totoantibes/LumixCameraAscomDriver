@@ -82,6 +82,37 @@ namespace ASCOM.Lumix.Usb
             }
         }
 
+        /// <summary>
+        /// Camera-free diagnostic: round-trip the capture struct through the native
+        /// marshaller to prove net472 can handle it (the ~535 KB enumerate struct
+        /// could NOT be blitted by-ref; the ~2 KB REC_CTRL can). No SDK/device needed.
+        /// </summary>
+        public static string DiagnoseCaptureMarshalling()
+        {
+            int size = Marshal.SizeOf(typeof(NativeMethods.LMX_STRUCT_REC_CTRL));
+            var rc = new NativeMethods.LMX_STRUCT_REC_CTRL
+            {
+                CtrlID = NativeMethods.TAG_RELEASE_ONESHOT,
+                ParamData = new NativeMethods.LMX_STRUCT_PTP_FORM_ENUM_UInt32
+                {
+                    NumOfVal = 0,
+                    SupportVal = new int[NativeMethods.USER_PTP_ARRAY_MAX],
+                    Available = 0,
+                },
+            };
+            IntPtr p = Marshal.AllocHGlobal(size);
+            try
+            {
+                Marshal.StructureToPtr(rc, p, false);
+                var back = (NativeMethods.LMX_STRUCT_REC_CTRL)Marshal.PtrToStructure(p, typeof(NativeMethods.LMX_STRUCT_REC_CTRL));
+                bool ok = back.CtrlID == NativeMethods.TAG_RELEASE_ONESHOT
+                          && back.ParamData.SupportVal != null
+                          && back.ParamData.SupportVal.Length == NativeMethods.USER_PTP_ARRAY_MAX;
+                return $"LMX_STRUCT_REC_CTRL size={size} bytes; round-trip {(ok ? "OK" : "MISMATCH")} (CtrlID=0x{back.CtrlID:X}).";
+            }
+            finally { Marshal.DestroyStructure(p, typeof(NativeMethods.LMX_STRUCT_REC_CTRL)); Marshal.FreeHGlobal(p); }
+        }
+
         private static string ResolveDll(string dllPath)
         {
             if (string.IsNullOrEmpty(dllPath)) return null;
