@@ -21,6 +21,7 @@ Public Class SetupDialogForm
         My.Settings.ISO = CBISO.SelectedItem.ToString()
         My.Settings.IPAddress = Camera.IPAddress
         My.Settings.TempPath = TBTempPath.Text
+        My.Settings.ConnectionMode = SelectedMode ' persist the chosen transport for next session
         Me.DialogResult = System.Windows.Forms.DialogResult.OK
         Me.Close()
     End Sub
@@ -52,7 +53,81 @@ Public Class SetupDialogForm
         For i = 0 To 58
             CBShutterSpeed.Items.Add(Camera.ShutterTable(i, 1))
         Next
+        BuildModeSelector()
     End Sub
+
+    Private CBConnectionMode As ComboBox
+    Private lblModeStatus As Label
+
+    ''' <summary>
+    ''' Add the connection-mode selector at the top of the form (WiFi / USB / USB
+    ''' Extended). Detects a connected USB camera and the Tether DLL to preselect a
+    ''' sensible default; the chosen value is persisted (My.Settings.ConnectionMode).
+    ''' </summary>
+    Private Sub BuildModeSelector()
+        Const shift As Integer = 46
+        Me.ClientSize = New Drawing.Size(Me.ClientSize.Width, Me.ClientSize.Height + shift)
+        For Each c As Control In Me.Controls
+            c.Top += shift
+        Next
+
+        Me.Controls.Add(New Label With {.Text = "Connection:", .Location = New Drawing.Point(12, 12), .AutoSize = True})
+        CBConnectionMode = New ComboBox With {
+            .DropDownStyle = ComboBoxStyle.DropDownList,
+            .Location = New Drawing.Point(100, 8),
+            .Size = New Drawing.Size(190, 24)}
+        CBConnectionMode.Items.AddRange(New Object() {ModeDisplay("WiFi"), ModeDisplay("USB"), ModeDisplay("USBExtended")})
+        Me.Controls.Add(CBConnectionMode)
+        lblModeStatus = New Label With {.Location = New Drawing.Point(300, 12), .AutoSize = True, .ForeColor = Drawing.Color.DimGray}
+        Me.Controls.Add(lblModeStatus)
+
+        Dim usbPresent As Boolean = UsbTransport.IsUsbCameraPresent()
+        Dim tetherPresent As Boolean = UsbTransport.IsTetherInstalled()
+        lblModeStatus.Text = String.Format("USB cam: {0}   Tether: {1}",
+            If(usbPresent, "detected", "none"), If(tetherPresent, "found", "not found"))
+
+        ' Retain the saved choice when the hardware still supports it; otherwise fall
+        ' back to what is actually available now.
+        Dim saved As String = My.Settings.ConnectionMode
+        Dim preselect As String
+        If saved = "USBExtended" AndAlso usbPresent AndAlso tetherPresent Then
+            preselect = "USBExtended"
+        ElseIf saved = "USB" AndAlso usbPresent Then
+            preselect = "USB"
+        ElseIf saved = "WiFi" Then
+            preselect = "WiFi"
+        ElseIf usbPresent AndAlso tetherPresent Then
+            preselect = "USBExtended"
+        ElseIf usbPresent Then
+            preselect = "USB"
+        Else
+            preselect = "WiFi"
+        End If
+        CBConnectionMode.SelectedItem = ModeDisplay(preselect)
+    End Sub
+
+    Private Shared Function ModeDisplay(mode As String) As String
+        Select Case mode
+            Case "USB" : Return "USB (Standard)"
+            Case "USBExtended" : Return "USB Extended (Tether)"
+            Case Else : Return "Wi-Fi (HTTP)"
+        End Select
+    End Function
+
+    Private Shared Function ModeFromDisplay(display As String) As String
+        If display Is Nothing Then Return "WiFi"
+        If display.StartsWith("USB Extended") Then Return "USBExtended"
+        If display.StartsWith("USB") Then Return "USB"
+        Return "WiFi"
+    End Function
+
+    ''' <summary>The connection mode currently selected in the dialog.</summary>
+    Private ReadOnly Property SelectedMode As String
+        Get
+            If CBConnectionMode Is Nothing OrElse CBConnectionMode.SelectedItem Is Nothing Then Return My.Settings.ConnectionMode
+            Return ModeFromDisplay(CBConnectionMode.SelectedItem.ToString())
+        End Get
+    End Property
 
     ''' <summary>
     ''' MIB_IPNETROW structure returned by GetIpNetTable
@@ -164,8 +239,9 @@ Public Class SetupDialogForm
     End Sub
 
     Private Sub SetupDialogForm_Load(sender As System.Object, e As System.EventArgs) Handles MyBase.Load ' Form load event handler
-        ' Retrieve current values of user settings from the ASCOM Profile
-        InitUI()
+        ' Retrieve current values of user settings from the ASCOM Profile.
+        ' Only run the WiFi LAN discovery in WiFi mode (it is a slow, pointless scan over USB).
+        If SelectedMode = "WiFi" Then InitUI()
         ' Set default value for CBShutterSpeed
         If CBShutterSpeed.Items.Count > 0 Then
 

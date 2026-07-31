@@ -51,8 +51,31 @@ Public Class UsbTransport
     End Sub
 
     ''' <summary>Default LUMIX Tether install path (never bundled — the user installs it).</summary>
-    Private Shared Function TetherDllPath() As String
+    Public Shared Function TetherDllPath() As String
         Return "C:\Program Files\Panasonic\LUMIX Tether\Lmxptpif.dll"
+    End Function
+
+    ''' <summary>True if the user's LUMIX Tether DLL is installed (enables Extended/bulb).</summary>
+    Public Shared Function IsTetherInstalled() As Boolean
+        Return File.Exists(TetherDllPath())
+    End Function
+
+    ''' <summary>
+    ''' True if a Panasonic USB device is currently present. Lumix bodies in PTP mode
+    ''' enumerate under vendor id 04DA. Detection is SDK-free (WMI) so it does not lock
+    ''' the process to a Lmxptpif.dll before the real connect chooses public vs Tether.
+    ''' </summary>
+    Public Shared Function IsUsbCameraPresent() As Boolean
+        Try
+            Using searcher As New System.Management.ManagementObjectSearcher(
+                "SELECT DeviceID FROM Win32_PnPEntity WHERE DeviceID LIKE '%VID_04DA%'")
+                For Each mo As System.Management.ManagementObject In searcher.Get()
+                    Return True
+                Next
+            End Using
+        Catch
+        End Try
+        Return False
     End Function
 
     Public Shared Sub Disconnect()

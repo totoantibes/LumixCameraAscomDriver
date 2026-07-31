@@ -170,6 +170,7 @@
     <Reference Include="System.Windows.Presentation" />
     <Reference Include="System.XML" />
     <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Management" />
     <Reference Include="WindowsBase" />
   </ItemGroup>
   <ItemGroup>
