@@ -58,6 +58,7 @@ Public Class SetupDialogForm
 
     Private CBConnectionMode As ComboBox
     Private lblModeStatus As Label
+    Private btnLiveView As Button
 
     ''' <summary>
     ''' Add the connection-mode selector at the top of the form (WiFi / USB / USB
@@ -104,6 +105,22 @@ Public Class SetupDialogForm
             preselect = "WiFi"
         End If
         CBConnectionMode.SelectedItem = ModeDisplay(preselect)
+
+        ' Live View button (USB modes only).
+        btnLiveView = New Button With {
+            .Text = "Live View…", .Location = New Drawing.Point(Me.ClientSize.Width - 110, 8),
+            .Size = New Drawing.Size(100, 26), .Anchor = AnchorStyles.Top Or AnchorStyles.Right}
+        AddHandler btnLiveView.Click, AddressOf OpenLiveView
+        Me.Controls.Add(btnLiveView)
+        btnLiveView.Enabled = SelectedMode.StartsWith("USB")
+        AddHandler CBConnectionMode.SelectedIndexChanged, Sub(s, e) btnLiveView.Enabled = SelectedMode.StartsWith("USB")
+    End Sub
+
+    Private Sub OpenLiveView(sender As Object, e As EventArgs)
+        If Not SelectedMode.StartsWith("USB") Then Return
+        Using f As New LiveViewForm(SelectedMode = "USBExtended")
+            f.ShowDialog(Me)
+        End Using
     End Sub
 
     Private Shared Function ModeDisplay(mode As String) As String

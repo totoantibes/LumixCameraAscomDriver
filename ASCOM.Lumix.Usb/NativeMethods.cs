@@ -147,5 +147,35 @@ namespace ASCOM.Lumix.Usb
             Ext_ImageInfo_GetCapability(CapBuf, Ctx, out ignore);
             return Ext_ImageInfo_SetImageQuality(IMGQ_RAW, Ctx, out e);
         }
+
+        // ---- live view (both DLLs export it; Ext adds ctx) ----
+        internal const uint LIVEVIEW_STREAMDATA_SIZE_MAX = 1 * 1024 * 1024; // JPEG frame buffer
+        internal const int LIVEVIEW_HISTGRAM_ELEMENT_SIZE = 64;
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct LMX_LIVEVIEW_HISTGRAM
+        {
+            public uint valid, samples, elems;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = LIVEVIEW_HISTGRAM_ELEMENT_SIZE)] public byte[] element;
+        }
+        [StructLayout(LayoutKind.Sequential)] internal struct LMX_LIVEVIEW_POSTURE { public ushort posture; }
+        [StructLayout(LayoutKind.Sequential)] internal struct LMX_LIVEVIEW_LEVEL { public ushort roll, pitch; }
+
+        [DllImport(DLLNAME, EntryPoint = "LMX_func_api_Ctrl_LiveView_Start", ExactSpelling = true, CallingConvention = CC)] internal static extern byte Pub_LiveView_Start(out uint e);
+        [DllImport(DLLNAME, EntryPoint = "LMX_func_api_Ctrl_LiveView_Stop", ExactSpelling = true, CallingConvention = CC)] internal static extern byte Pub_LiveView_Stop(out uint e);
+        [DllImport(DLLNAME, EntryPoint = "LMX_func_api_Get_LiveView_data", ExactSpelling = true, CallingConvention = CC)]
+        internal static extern byte Pub_Get_LiveView_data(ref LMX_LIVEVIEW_HISTGRAM h, out uint hs, ref LMX_LIVEVIEW_POSTURE p, out uint ps, ref LMX_LIVEVIEW_LEVEL l, out uint ls, ref byte jpeg, out uint js, out uint e);
+
+        [DllImport(DLLNAME, EntryPoint = "LMX_func_api_Ctrl_LiveView_Start", ExactSpelling = true, CallingConvention = CC)] internal static extern byte Ext_LiveView_Start(IntPtr ctx, out uint e);
+        [DllImport(DLLNAME, EntryPoint = "LMX_func_api_Ctrl_LiveView_Stop", ExactSpelling = true, CallingConvention = CC)] internal static extern byte Ext_LiveView_Stop(IntPtr ctx, out uint e);
+        [DllImport(DLLNAME, EntryPoint = "LMX_func_api_Get_LiveView_data", ExactSpelling = true, CallingConvention = CC)]
+        internal static extern byte Ext_Get_LiveView_data(ref LMX_LIVEVIEW_HISTGRAM h, out uint hs, ref LMX_LIVEVIEW_POSTURE p, out uint ps, ref LMX_LIVEVIEW_LEVEL l, out uint ls, ref byte jpeg, out uint js, IntPtr ctx, out uint e);
+
+        internal static byte LiveView_Start(out uint e) => Extended ? Ext_LiveView_Start(Ctx, out e) : Pub_LiveView_Start(out e);
+        internal static byte LiveView_Stop(out uint e) => Extended ? Ext_LiveView_Stop(Ctx, out e) : Pub_LiveView_Stop(out e);
+        internal static byte Get_LiveView_data(ref LMX_LIVEVIEW_HISTGRAM h, out uint hs, ref LMX_LIVEVIEW_POSTURE p, out uint ps, ref LMX_LIVEVIEW_LEVEL l, out uint ls, ref byte jpeg, out uint js, out uint e)
+            => Extended
+                ? Ext_Get_LiveView_data(ref h, out hs, ref p, out ps, ref l, out ls, ref jpeg, out js, Ctx, out e)
+                : Pub_Get_LiveView_data(ref h, out hs, ref p, out ps, ref l, out ls, ref jpeg, out js, out e);
     }
 }

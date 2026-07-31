@@ -123,6 +123,48 @@ Public Class UsbTransport
         If index >= 0 AndAlso index < _cam.IsoValues.Count Then _cam.SetIso(_cam.IsoValues(index))
     End Sub
 
+    ' ---- live view ----
+    Public Shared Function StartLiveView() As Boolean
+        Return _cam IsNot Nothing AndAlso _cam.StartLiveView()
+    End Function
+    Public Shared Sub StopLiveView()
+        If _cam IsNot Nothing Then _cam.StopLiveView()
+    End Sub
+    ''' <summary>One live-view JPEG frame, or Nothing.</summary>
+    Public Shared Function GetLiveViewFrame() As Byte()
+        Return If(_cam IsNot Nothing, _cam.GetLiveViewJpeg(), Nothing)
+    End Function
+
+    ''' <summary>Supported shutter speeds formatted for display (e.g. "4s", "1/125").</summary>
+    Public Shared Function ShutterDisplay() As String()
+        If _cam Is Nothing OrElse _cam.ShutterSeconds.Count = 0 Then Return New String() {}
+        Dim n As Integer = _cam.ShutterSeconds.Count
+        Dim a(n - 1) As String
+        For i As Integer = 0 To n - 1
+            a(i) = FormatSeconds(_cam.ShutterSeconds(i))
+        Next
+        Return a
+    End Function
+    Public Shared Sub SetShutterByIndex(index As Integer)
+        If _cam IsNot Nothing Then _cam.SetShutterByIndex(index)
+    End Sub
+
+    ''' <summary>Supported ISO entries (index-labelled; raw codes aren't human values).</summary>
+    Public Shared Function IsoDisplay() As String()
+        If _cam Is Nothing OrElse _cam.IsoValues.Count = 0 Then Return New String() {}
+        Dim n As Integer = _cam.IsoValues.Count
+        Dim a(n - 1) As String
+        For i As Integer = 0 To n - 1
+            a(i) = "ISO " & (i + 1)
+        Next
+        Return a
+    End Function
+
+    Private Shared Function FormatSeconds(s As Double) As String
+        If s >= 1 Then Return s.ToString("0.###") & "s"
+        Return "1/" & CInt(Math.Round(1.0 / s)).ToString()
+    End Function
+
     ''' <summary>
     ''' Minimal sensor spec by USB model name (DC- prefixed, as the USB SDK reports it).
     ''' Returns full-res width/height and pixel pitch (µm); DefaultLumix otherwise.

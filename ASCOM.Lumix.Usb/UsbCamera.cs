@@ -96,6 +96,45 @@ namespace ASCOM.Lumix.Usb
 
         public bool SetIso(uint rawIso) { uint e; return NativeMethods.ISO_Set_Param(rawIso, out e) != 0; }
         public bool SetShutter(long rawSs) { uint e; return NativeMethods.SS_Set_Param(rawSs, out e) != 0; }
+        public bool SetShutterByIndex(int i) { return i >= 0 && i < _ssRaw.Count && SetShutter(_ssRaw[i]); }
+        public bool SetIsoByIndex(int i) { return i >= 0 && i < _isoValues.Count && SetIso(_isoValues[i]); }
+
+        // ---- live view (JPEG frames; works in Standard or Extended) ----
+        private byte[] _lvJpeg;
+        private NativeMethods.LMX_LIVEVIEW_HISTGRAM _lvHist;
+        private bool _lvActive;
+        public bool LiveViewActive { get { return _lvActive; } }
+
+        public bool StartLiveView()
+        {
+            if (!_connected) return false;
+            _lvJpeg = new byte[NativeMethods.LIVEVIEW_STREAMDATA_SIZE_MAX];
+            _lvHist = new NativeMethods.LMX_LIVEVIEW_HISTGRAM { element = new byte[NativeMethods.LIVEVIEW_HISTGRAM_ELEMENT_SIZE] };
+            uint e;
+            _lvActive = NativeMethods.LiveView_Start(out e) != 0;
+            return _lvActive;
+        }
+
+        public void StopLiveView()
+        {
+            if (!_lvActive) return;
+            uint e; NativeMethods.LiveView_Stop(out e);
+            _lvActive = false;
+        }
+
+        /// <summary>Grab one live-view JPEG frame (or null if none/failed).</summary>
+        public byte[] GetLiveViewJpeg()
+        {
+            if (!_lvActive || _lvJpeg == null) return null;
+            var post = new NativeMethods.LMX_LIVEVIEW_POSTURE();
+            var lvl = new NativeMethods.LMX_LIVEVIEW_LEVEL();
+            uint hs, ps, ls, js, e;
+            byte r = NativeMethods.Get_LiveView_data(ref _lvHist, out hs, ref post, out ps, ref lvl, out ls, ref _lvJpeg[0], out js, out e);
+            if (r == 0 || js == 0 || js > _lvJpeg.Length) return null;
+            var frame = new byte[js];
+            Array.Copy(_lvJpeg, frame, (int)js);
+            return frame;
+        }
 
         /// <summary>One-shot exposure (≤ the camera's discrete list; Standard or Extended).</summary>
         public CaptureResult CaptureOneShot(string outputDir, int timeoutMs)
@@ -270,6 +309,7 @@ namespace ASCOM.Lumix.Usb
         public void Disconnect()
         {
             if (!_connected) return;
+            StopLiveView();
             uint err;
             try
             {
