@@ -617,7 +617,7 @@ Public Class Camera
             Dim d As MyDelegate2 = AddressOf Polling
 
             If value Then
-                If My.Settings.ConnectionMode = "USB" Then
+                If My.Settings.ConnectionMode.StartsWith("USB") Then
                     ConnectUsb()
                     Return
                 End If
@@ -660,7 +660,7 @@ Public Class Camera
 
 
             Else
-                If My.Settings.ConnectionMode = "USB" Then
+                If My.Settings.ConnectionMode.StartsWith("USB") Then
                     connectedState = False
                     UsbTransport.Disconnect()
                     Return
@@ -1004,7 +1004,7 @@ Public Class Camera
             'Throw New ASCOM.PropertyNotImplementedException("Gain", False)
         End Get
         Set(value As Short)
-            If My.Settings.ConnectionMode = "USB" Then
+            If My.Settings.ConnectionMode.StartsWith("USB") Then
                 UsbTransport.SetIsoIndex(value) ' index into the camera's supported ISO list
                 CurrentISO = value
                 Return
@@ -1503,7 +1503,7 @@ Public Class Camera
     ''' <summary>Connect over USB (Standard/public SDK) and set sensor geometry from the model.</summary>
     Private Sub ConnectUsb()
         Try
-            UsbTransport.Connect()
+            UsbTransport.Connect(My.Settings.ConnectionMode = "USBExtended")
             MODEL = UsbTransport.ModelName
             TempPath = My.Settings.TempPath
             Dim w As Integer, h As Integer, p As Double
@@ -1526,10 +1526,18 @@ Public Class Camera
     ''' <summary>Background worker: one-shot USB capture -> file -> TIFF -> ImageReady.</summary>
     Private Sub UsbCaptureWorker()
         Try
-            ' Snap the requested exposure to the nearest supported shutter speed before firing.
-            Dim actual As Double = UsbTransport.SetShutterSeconds(cameraLastExposureDuration)
-            TL.LogMessage("USB capture", "requested " & cameraLastExposureDuration & "s -> nearest " & actual & "s")
-            Dim res = UsbTransport.Capture(TempPath, 90000)
+            Dim dur As Double = cameraLastExposureDuration
+            Dim res As ASCOM.Lumix.Usb.CaptureResult
+            If UsbTransport.IsExtended AndAlso dur > 1.0 Then
+                ' Extended mode: hold the shutter open for the exact time (bulb), any duration incl. >60s.
+                TL.LogMessage("USB capture", "bulb " & dur & "s")
+                res = UsbTransport.CaptureBulb(TempPath, dur, CInt(dur * 1000) + 120000)
+            Else
+                ' Snap to the nearest supported discrete shutter speed and fire a one-shot.
+                Dim actual As Double = UsbTransport.SetShutterSeconds(dur)
+                TL.LogMessage("USB capture", "requested " & dur & "s -> nearest " & actual & "s")
+                res = UsbTransport.Capture(TempPath, 90000)
+            End If
             If res IsNot Nothing AndAlso res.Success Then
                 ConvertToTiff(res.FilePath, res.Format <> 1) ' format 1 = JPEG, otherwise RAW
                 If Not String.IsNullOrEmpty(TiffFileName) AndAlso IO.File.Exists(TiffFileName) Then
@@ -1594,7 +1602,7 @@ Public Class Camera
         cameraImageReady = False
         cameraLastExposureDuration = Duration
         exposureStart = DateTime.Now
-        If My.Settings.ConnectionMode = "USB" Then
+        If My.Settings.ConnectionMode.StartsWith("USB") Then
             ' USB: fire the capture on a background thread so StartExposure returns
             ' promptly. NOTE: exposure-time -> raw shutter mapping is a follow-up; this
             ' captures at the camera's current shutter setting.

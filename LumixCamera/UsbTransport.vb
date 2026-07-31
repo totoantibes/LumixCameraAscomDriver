@@ -23,18 +23,37 @@ Public Class UsbTransport
         End Get
     End Property
 
-    ''' <summary>Initialise the SDK from the bundled native DLL and open device 0.</summary>
-    Public Shared Sub Connect()
-        Dim dir As String = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)
-        Dim arch As String = If(IntPtr.Size = 8, "x64", "x86")
-        Dim dll As String = Path.Combine(dir, "native", arch, "Lmxptpif.dll")
-        If Not File.Exists(dll) Then
-            Dim alt As String = Path.Combine(dir, "Lmxptpif.dll")
-            If File.Exists(alt) Then dll = alt
+    Public Shared ReadOnly Property IsExtended As Boolean
+        Get
+            Return _cam IsNot Nothing AndAlso _cam.IsExtended
+        End Get
+    End Property
+
+    ''' <summary>
+    ''' Initialise the SDK and open device 0. Standard uses the bundled public DLL;
+    ''' Extended loads the user's installed LUMIX Tether DLL (bulb / &gt;60 s).
+    ''' </summary>
+    Public Shared Sub Connect(extended As Boolean)
+        Dim dll As String
+        If extended Then
+            dll = TetherDllPath()
+        Else
+            Dim dir As String = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)
+            Dim arch As String = If(IntPtr.Size = 8, "x64", "x86")
+            dll = Path.Combine(dir, "native", arch, "Lmxptpif.dll")
+            If Not File.Exists(dll) Then
+                Dim alt As String = Path.Combine(dir, "Lmxptpif.dll")
+                If File.Exists(alt) Then dll = alt
+            End If
         End If
-        LumixUsb.Initialize(dll)
+        LumixUsb.Initialize(dll, extended)
         _cam = UsbCamera.Open(0)
     End Sub
+
+    ''' <summary>Default LUMIX Tether install path (never bundled — the user installs it).</summary>
+    Private Shared Function TetherDllPath() As String
+        Return "C:\Program Files\Panasonic\LUMIX Tether\Lmxptpif.dll"
+    End Function
 
     Public Shared Sub Disconnect()
         If _cam IsNot Nothing Then
@@ -51,6 +70,12 @@ Public Class UsbTransport
     Public Shared Function Capture(dir As String, timeoutMs As Integer) As CaptureResult
         If _cam Is Nothing Then Return New CaptureResult With {.Success = False, .Error = "not connected"}
         Return _cam.CaptureOneShot(dir, timeoutMs)
+    End Function
+
+    ''' <summary>Bulb exposure of <paramref name="seconds"/> (Extended only; supports &gt;60 s).</summary>
+    Public Shared Function CaptureBulb(dir As String, seconds As Double, timeoutMs As Integer) As CaptureResult
+        If _cam Is Nothing Then Return New CaptureResult With {.Success = False, .Error = "not connected"}
+        Return _cam.CaptureBulb(dir, seconds, timeoutMs)
     End Function
 
     ''' <summary>Snap the requested exposure to the nearest supported shutter speed and set it. Returns the actual seconds.</summary>

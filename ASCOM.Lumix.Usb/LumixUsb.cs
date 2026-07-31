@@ -26,7 +26,7 @@ namespace ASCOM.Lumix.Usb
         /// <paramref name="dllPath"/> is a full path to a bitness-matched Lmxptpif.dll
         /// (or a directory containing it). Safe to call more than once.
         /// </summary>
-        public static void Initialize(string dllPath)
+        public static void Initialize(string dllPath, bool extended = false)
         {
             lock (_gate)
             {
@@ -44,11 +44,16 @@ namespace ASCOM.Lumix.Usb
                         $"LoadLibraryEx('{resolved}') failed (Win32 error {Marshal.GetLastWin32Error()}). " +
                         (IntPtr.Size == 8 ? "Process is x64 - ensure an x64 Lmxptpif.dll." : "Process is x86 - ensure an x86 Lmxptpif.dll."));
 
+                NativeMethods.Extended = extended;
+                if (extended) NativeMethods.EnsureTetherBuffers();
                 NativeMethods.LMX_func_api_Init();
                 ActiveDllPath = resolved;
                 _initialized = true;
             }
         }
+
+        /// <summary>True if running against the Tether (Extended) DLL.</summary>
+        public static bool IsExtended { get { lock (_gate) return NativeMethods.Extended; } }
 
         /// <summary>
         /// Enumerate connected cameras and return their model names (as the USB SDK
@@ -61,24 +66,25 @@ namespace ASCOM.Lumix.Usb
             {
                 if (!_initialized) throw new InvalidOperationException("Initialize() must be called first.");
 
-                IntPtr buf = Marshal.AllocHGlobal(NativeMethods.DEVICE_INFO_SIZE);
-                try
+                if (NativeMethods.Extended)
                 {
-                    Marshal.Copy(new byte[NativeMethods.DEVICE_INFO_SIZE], 0, buf, NativeMethods.DEVICE_INFO_SIZE);
+                    NativeMethods.EnsureTetherBuffers();
                     uint err;
-                    NativeMethods.LMX_func_api_Get_PnPDeviceInfo(buf, out err);
-
-                    int count = Marshal.ReadInt32(buf, 0);
-                    var models = new List<string>(Math.Max(0, count));
-                    for (int i = 0; i < count && i < NativeMethods.DEVINFO_ARRAY_MAX; i++)
-                    {
-                        IntPtr namePtr = (IntPtr)(buf.ToInt64() + NativeMethods.INFO_BASE
-                                                  + (long)i * NativeMethods.INFO_STRIDE + NativeMethods.MODELNAME_OFF);
-                        models.Add(Marshal.PtrToStringUni(namePtr) ?? string.Empty);
-                    }
-                    return models;
+                    NativeMethods.Ext_GetPnPDeviceInfo(NativeMethods.DevBuf, out err);
+                    return ReadModels(NativeMethods.DevBuf, NativeMethods.EXT_INFO_BASE);
                 }
-                finally { Marshal.FreeHGlobal(buf); }
+                else
+                {
+                    IntPtr buf = Marshal.AllocHGlobal(NativeMethods.PUB_DEVICE_INFO_SIZE);
+                    try
+                    {
+                        Marshal.Copy(new byte[NativeMethods.PUB_DEVICE_INFO_SIZE], 0, buf, NativeMethods.PUB_DEVICE_INFO_SIZE);
+                        uint err;
+                        NativeMethods.Pub_Get_PnPDeviceInfo(buf, out err);
+                        return ReadModels(buf, NativeMethods.PUB_INFO_BASE);
+                    }
+                    finally { Marshal.FreeHGlobal(buf); }
+                }
             }
         }
 
@@ -136,6 +142,19 @@ namespace ASCOM.Lumix.Usb
             };
             return $"decoded {secs.Count} of {synthetic.Length} (BULB/AUTO dropped): [{string.Join(", ", secs)}] ; "
                    + $"nearest {nearest(3.9)}, {nearest(0.1)}, {nearest(0.007)}";
+        }
+
+        private static IReadOnlyList<string> ReadModels(IntPtr buf, int infoBase)
+        {
+            int count = Marshal.ReadInt32(buf, 0);
+            var models = new List<string>(Math.Max(0, count));
+            for (int i = 0; i < count && i < NativeMethods.DEVINFO_ARRAY_MAX; i++)
+            {
+                IntPtr namePtr = (IntPtr)(buf.ToInt64() + infoBase
+                                          + (long)i * NativeMethods.INFO_STRIDE + NativeMethods.MODELNAME_OFF);
+                models.Add(Marshal.PtrToStringUni(namePtr) ?? string.Empty);
+            }
+            return models;
         }
 
         private static string ResolveDll(string dllPath)
