@@ -1416,6 +1416,11 @@ Public Class Camera
 
     Private Shared Function NumberPix() As String
         Dim response As String = SendLumixMessage(NUMPIX)
+        ' SendLumixMessage returns "" (or Nothing) whenever the request fails, and
+        ' XElement.Parse("") throws "XmlException: Root element is missing". That escaped
+        ' as the reported cause of every failed download, hiding the real one: the
+        ' camera simply had not answered get_content_info yet.
+        If String.IsNullOrWhiteSpace(response) Then Return ""
         Dim doc As XElement = XElement.Parse(response)
         ' Return the count text if present. Was 'If <element>.Value Then' which does
         ' a CBool on the XML text and throws InvalidCastException on a numeric/empty value.
@@ -1522,6 +1527,10 @@ Public Class Camera
                 End Using
             End If
         End Try
+        ' Every failure path used to fall off the end returning Nothing (the long-standing
+        ' BC42105 warning on this function). Callers concatenate and parse the result, so
+        ' return an empty string instead of a null reference.
+        Return ""
     End Function
 
 
