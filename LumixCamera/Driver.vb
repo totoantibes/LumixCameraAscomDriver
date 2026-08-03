@@ -1547,9 +1547,14 @@ Public Class Camera
 
     Function WaitBulb(ByVal Duration As Double) As Boolean
         TL.LogMessage("waiting while capturing", Duration.ToString)
-        System.Threading.Thread.Sleep(Duration * 1000) ' Sleep for the duration to simulate exposure, if this is in Bulb mode 
+        System.Threading.Thread.Sleep(Duration * 1000) ' Sleep for the duration to simulate exposure, if this is in Bulb mode
         StopExposure()
-        ' System.Threading.Thread.Sleep(1000) ' Sleep for 1s after the capture so the camera can breath a bit. 
+        ' The shutter is closed: the exposure is over. Say so now, rather than staying in
+        ' cameraExposing through the PLAYMODE round-trip and the DLNA browse that follow -
+        ' those took ~8s on a GH5S over WiFi, during which a client (and ConformU, which
+        ' abandons the test) still saw "Exposing" and could not tell the exposure had ended.
+        CurrentState = CameraStates.cameraReading
+        ' System.Threading.Thread.Sleep(1000) ' Sleep for 1s after the capture so the camera can breath a bit.
         Return True
     End Function
 
