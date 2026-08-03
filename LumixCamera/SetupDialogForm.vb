@@ -112,13 +112,24 @@ Public Class SetupDialogForm
             .Size = New Drawing.Size(100, 26), .Anchor = AnchorStyles.Top Or AnchorStyles.Right}
         AddHandler btnLiveView.Click, AddressOf OpenLiveView
         Me.Controls.Add(btnLiveView)
-        btnLiveView.Enabled = SelectedMode.StartsWith("USB")
-        AddHandler CBConnectionMode.SelectedIndexChanged, Sub(s, e) btnLiveView.Enabled = SelectedMode.StartsWith("USB")
+        ' Live view works on both transports: the USB SDK hands over frames directly,
+        ' and WiFi streams MJPEG over UDP once the camera has been told where to send it.
+        btnLiveView.Enabled = LiveViewAvailable()
+        AddHandler CBConnectionMode.SelectedIndexChanged, Sub(s, e) btnLiveView.Enabled = LiveViewAvailable()
     End Sub
 
+    ''' <summary>
+    ''' USB can always open live view; WiFi needs an IP first, since the stream is
+    ''' started by an HTTP request to the camera.
+    ''' </summary>
+    Private Function LiveViewAvailable() As Boolean
+        If SelectedMode.StartsWith("USB") Then Return True
+        Return Not String.IsNullOrEmpty(Camera.IPAddress) AndAlso Camera.IPAddress <> Camera.IPAddressDefault
+    End Function
+
     Private Sub OpenLiveView(sender As Object, e As EventArgs)
-        If Not SelectedMode.StartsWith("USB") Then Return
-        Using f As New LiveViewForm(SelectedMode = "USBExtended")
+        If Not LiveViewAvailable() Then Return
+        Using f As New LiveViewForm(SelectedMode = "USBExtended", Not SelectedMode.StartsWith("USB"))
             f.ShowDialog(Me)
         End Using
     End Sub

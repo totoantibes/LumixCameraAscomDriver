@@ -189,6 +189,7 @@
     <Compile Include="Driver.vb" />
     <Compile Include="UsbTransport.vb" />
     <Compile Include="LiveViewForm.vb" />
+    <Compile Include="WifiLiveView.vb" />
     <Compile Include="My Project\AssemblyInfo.vb" />
     <Compile Include="My Project\Application.Designer.vb">
       <AutoGen>True</AutoGen>
