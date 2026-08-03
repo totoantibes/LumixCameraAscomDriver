@@ -1,4 +1,4 @@
-' --------------------------------------------------------------------------------
+﻿' --------------------------------------------------------------------------------
 ' ASCOM Camera driver for Lumix
 
 'This driver provides an interface to the Lumix http over wifi remote control protocol
@@ -594,6 +594,26 @@ Public Class Camera
         Throw New MethodNotImplementedException("CommandString")
     End Function
 
+    ''' <summary>
+    ''' Local filename for a camera download URL. This was
+    ''' Images.Substring(Images.Length - 13) - a fixed 13-character tail that assumed
+    ''' one exact name length. "DO02648350.RW2" is 14 characters, so the leading "D"
+    ''' was silently dropped on every download; any other naming (a longer stem, a
+    ''' different extension, a query string) would slice mid-name instead.
+    ''' All four call sites must agree on the name or the convert/delete steps miss
+    ''' the file, which is the other reason to have one function for it.
+    ''' </summary>
+    Private Shared Function LocalNameFor(url As String) As String
+        If String.IsNullOrEmpty(url) Then Return url
+        Dim name As String = url
+        Dim q As Integer = name.IndexOfAny(New Char() {"?"c, "#"c})
+        If q >= 0 Then name = name.Substring(0, q)
+        Dim slash As Integer = name.LastIndexOfAny(New Char() {"/"c, "\"c})
+        If slash >= 0 Then name = name.Substring(slash + 1)
+        If name = "" Then Return "capture.dat"
+        Return name
+    End Function
+
     Public Property Connected() As Boolean Implements ICameraV2.Connected
         Get
             TL.LogMessage("Connected Get", IsConnected.ToString())
@@ -765,12 +785,14 @@ Public Class Camera
     Private exposureStart As DateTime = DateTime.MinValue
     Private cameraLastExposureDuration As Double = 0.0
     Private cameraImageReady As Boolean = False
+    Private cameraAborted As Boolean = False ' set by AbortExposure so the async capture chain stops
     'Private cameraImageArray As Integer(,,)
     'Private cameraImageArrayVariant As Object(,,)
     Private cameraImageArray As Integer(,)
     Private cameraImageArrayVariant As Object(,)
 
     Public Sub AbortExposure() Implements ICameraV2.AbortExposure
+        cameraAborted = True ' the in-flight WaitBulb -> ReadImageFromCamera chain checks this and bails
         StopExposure()
         TL.LogMessage("AbortExposure", "Exposure Aborted")
         CurrentState = CameraStates.cameraIdle
@@ -1119,6 +1141,13 @@ Public Class Camera
                 TL.LogMessage("ImageArray Get", "Throwing InvalidOperationException because of a call to ImageArray before the first image has been taken!")
                 Throw New ASCOM.InvalidOperationException("Call to ImageArray before the first image has been taken!")
             End If
+            ' Already built for this exposure: hand back the same array. The TIFF was
+            ' deleted after the first read, so re-decoding it is impossible - and ASCOM
+            ' allows ImageArray to be read more than once per exposure.
+            If cameraImageArray IsNot Nothing Then
+                TL.LogMessage("ImageArray Get", "returning the array already built for this exposure")
+                Return cameraImageArray
+            End If
             CurrentState = CameraStates.cameraDownload
             Dim Tiffimagefile As IO.FileStream
             Tiffimagefile = New FileStream(TiffFileName, IO.FileMode.Open)
@@ -1131,12 +1160,17 @@ Public Class Camera
             Dim bytesPerPixel As UShort
             bytesPerPixel = bitmapSource.Format.BitsPerPixel / 8
             stride = bitmapSource.PixelWidth * bytesPerPixel
+            ' Clamp the copy to the smaller of the table size and the decoded image
+            ' (the JPG/thumb is often smaller), so we never index past the pixel
+            ' buffer or the output array.
+            Dim imgW As Integer = Math.Min(cameraNumX, bitmapSource.PixelWidth)
+            Dim imgH As Integer = Math.Min(cameraNumY, bitmapSource.PixelHeight)
 
             If CurrentROM = 1 Then  'RAW
                 Dim pixels(bitmapSource.PixelHeight * stride * 2) As Byte
                 bitmapSource.CopyPixels(pixels, stride, 0)
-                For y = 0 To (cameraNumY - 2)
-                    For x = 0 To (cameraNumX - 2)
+                For y = 0 To (imgH - 2)
+                    For x = 0 To (imgW - 2)
                         index = x * 3 + (y * stride)
                         cameraImageArray(x, y) = pixels(index + 2) * 256 'R and B are reversed
                         cameraImageArray(x + 1, y + 1) = pixels(index) * 256 'R and B are reversed
@@ -1149,8 +1183,8 @@ Public Class Camera
             Else
                 Dim pixels(bitmapSource.PixelHeight * stride) As Byte
                 bitmapSource.CopyPixels(pixels, stride, 0)
-                For y = 0 To (cameraNumY - 2)
-                    For x = 0 To (cameraNumX - 2)
+                For y = 0 To (imgH - 2)
+                    For x = 0 To (imgW - 2)
                         index = x * 3 + (y * stride)
                         cameraImageArray(x, y) = pixels(index + 2) * 256 'R 
                         cameraImageArray(x + 1, y + 1) = pixels(index) * 256 'B 
@@ -1172,7 +1206,11 @@ Public Class Camera
             End Try
 
             TL.LogMessage("ImageArray Get", "getting the Array")
-            cameraImageReady = False
+            ' Do NOT clear cameraImageReady here. Reading the image must not consume it:
+            ' ASCOM keeps ImageReady true until the next StartExposure, and a client may
+            ' read ImageArray and ImageArrayVariant for the same exposure. Clearing it
+            ' made the very next ImageArrayVariant throw "before the first image has been
+            ' taken" (ConformU flagged exactly that). StartExposure resets the flag.
             CurrentState = CameraStates.cameraIdle
 
             Return cameraImageArray
@@ -1186,6 +1224,12 @@ Public Class Camera
                 Throw New ASCOM.InvalidOperationException("Call to ImageArrayVariant before the first image has been taken!")
             End If
             CurrentState = CameraStates.cameraDownload
+            ' A client may read the variant without reading ImageArray first; build it
+            ' then, rather than dereferencing a Nothing array (which surfaced as a raw
+            ' NullReferenceException instead of an ASCOM exception).
+            If cameraImageArray Is Nothing Then
+                Dim ignored As Object = Me.ImageArray
+            End If
             ReDim cameraImageArrayVariant(cameraNumX - 1, cameraNumY - 1)
             For i As Integer = 0 To cameraNumY - 1
                 For j As Integer = 0 To cameraNumX - 1
@@ -1373,11 +1417,26 @@ Public Class Camera
         End Set
     End Property
 
+    ' The camera reports err_busy on get_content_info until it has finished writing the
+    ' frame; ~20s is comfortably longer than a RAW commit observed on a GH5S over WiFi.
+    Private Const CONTENT_READY_WAIT_MS As Integer = 500
+    Private Const CONTENT_READY_RETRIES As Integer = 40
+
     Private Function NumberPix() As String
         Dim response As String = SendLumixMessage(NUMPIX)
+        ' err_busy / err_param etc: not ready (or refused) - report "not available".
+        If response IsNot Nothing AndAlso response.Contains("err") Then Return ""
+        ' SendLumixMessage returns "" (or Nothing) whenever the request fails, and
+        ' XElement.Parse("") throws "XmlException: Root element is missing". That escaped
+        ' as the reported cause of every failed download, hiding the real one: the
+        ' camera simply had not answered get_content_info yet.
+        If String.IsNullOrWhiteSpace(response) Then Return ""
         Dim doc As XElement = XElement.Parse(response)
-        If doc...<total_content_number>.Value Then
-            Return doc...<total_content_number>.Value
+        ' Return the count text if present. Was 'If <element>.Value Then' which does
+        ' a CBool on the XML text and throws InvalidCastException on a numeric/empty value.
+        Dim total As String = doc...<total_content_number>.Value
+        If Not String.IsNullOrEmpty(total) Then
+            Return total
         End If
         Return ""
     End Function
@@ -1390,8 +1449,22 @@ Public Class Camera
     Private Function GetPix(num As Int16) As String
         SendLumixMessage(PLAYMODE)
         Dim Start As Int16 = 0
+        ' Right after a capture the camera answers get_content_info with
+        ' <result>err_busy</result> while it is still committing the file - longest for
+        ' RAW. NumberPix() then returns "", and 'NumPix - num' threw
+        ' InvalidCastException ("" -> Double). Wait for a real count instead; give up
+        ' with "" so the caller raises a proper DriverException.
         Dim NumPix As String = NumberPix()
-        Dim SoapMsg As String = SoapEnvelop(Math.Max(NumPix - num, 0), num)
+        Dim waits As Integer = 0
+        Do While String.IsNullOrEmpty(NumPix) AndAlso waits < CONTENT_READY_RETRIES
+            Thread.Sleep(CONTENT_READY_WAIT_MS)
+            waits += 1
+            NumPix = NumberPix()
+        Loop
+        If String.IsNullOrEmpty(NumPix) Then Return ""
+        Dim total As Integer
+        If Not Integer.TryParse(NumPix, total) Then Return ""
+        Dim SoapMsg As String = SoapEnvelop(Math.Max(total - num, 0), num)
         Dim Stream As System.IO.StreamWriter
         Dim HTTPReq As HttpWebRequest
 
@@ -1478,6 +1551,10 @@ Public Class Camera
                 End Using
             End If
         End Try
+        ' Every failure path used to fall off the end returning Nothing (the long-standing
+        ' BC42105 warning on this function). Callers concatenate and parse the result, so
+        ' return an empty string instead of a null reference.
+        Return ""
     End Function
 
 
@@ -1491,12 +1568,17 @@ Public Class Camera
 
     Public Sub StartExposure(Duration As Double, Light As Boolean) Implements ICameraV2.StartExposure
         If (Duration < 0.0) Then Throw New InvalidValueException("StartExposure", Duration.ToString(), "0.0 upwards")
-        If (cameraNumX > ccdWidth) Then Throw New InvalidValueException("StartExposure", cameraNumX.ToString(), ccdWidth.ToString())
-        If (cameraNumY > ccdHeight) Then Throw New InvalidValueException("StartExposure", cameraNumY.ToString(), ccdHeight.ToString())
+        If (cameraStartX + cameraNumX > ccdWidth) Then Throw New InvalidValueException("StartExposure", cameraNumX.ToString(), ccdWidth.ToString())
+        If (cameraStartY + cameraNumY > ccdHeight) Then Throw New InvalidValueException("StartExposure", cameraNumY.ToString(), ccdHeight.ToString())
         If (cameraStartX > ccdWidth) Then Throw New InvalidValueException("StartExposure", cameraStartX.ToString(), ccdWidth.ToString())
         If (cameraStartY > ccdHeight) Then Throw New InvalidValueException("StartExposure", cameraStartY.ToString(), ccdHeight.ToString())
 
         cameraImageReady = False
+        cameraAborted = False
+        ' Drop the previous exposure's decoded array so ImageArray rebuilds from the new
+        ' TIFF rather than returning the cached one.
+        cameraImageArray = Nothing
+        cameraImageArrayVariant = Nothing
         cameraLastExposureDuration = Duration
         exposureStart = DateTime.Now
         SendLumixMessage(RECMODE) 'makes sure it is not in playmode...
@@ -1519,9 +1601,14 @@ Public Class Camera
 
     Function WaitBulb(ByVal Duration As Double) As Boolean
         TL.LogMessage("waiting while capturing", Duration.ToString)
-        System.Threading.Thread.Sleep(Duration * 1000) ' Sleep for the duration to simulate exposure, if this is in Bulb mode 
+        System.Threading.Thread.Sleep(Duration * 1000) ' Sleep for the duration to simulate exposure, if this is in Bulb mode
         StopExposure()
-        ' System.Threading.Thread.Sleep(1000) ' Sleep for 1s after the capture so the camera can breath a bit. 
+        ' The shutter is closed: the exposure is over. Say so now, rather than staying in
+        ' cameraExposing through the PLAYMODE round-trip and the DLNA browse that follow -
+        ' those took ~8s on a GH5S over WiFi, during which a client (and ConformU, which
+        ' abandons the test) still saw "Exposing" and could not tell the exposure had ended.
+        CurrentState = CameraStates.cameraReading
+        ' System.Threading.Thread.Sleep(1000) ' Sleep for 1s after the capture so the camera can breath a bit.
         Return True
     End Function
 
@@ -1597,6 +1684,10 @@ Public Class Camera
         Dim buflen As Integer = 1024
 
         cameraImageReady = False
+        If cameraAborted Then ' aborted during the exposure wait - don't download
+            CurrentState = CameraStates.cameraIdle
+            Exit Sub
+        End If
         Pictures = New XmlDocument
         Dim PictureString As String
         Dim LookupImgtag As String = ""
@@ -1621,10 +1712,16 @@ Public Class Camera
             Loop While (tries > 0 And temp.Contains("err"))
 
             PictureString = GetPix(1)
-            If PictureString IsNot "" Then
+            ' Value comparison, not reference: 'IsNot ""' compares references and is
+            ' therefore always True, so GetPix's documented "" failure return sailed
+            ' through the guard into XElement.Parse("") and surfaced as
+            ' "XmlException: Root element is missing" instead of the DriverException
+            ' intended here. (Same reference-vs-value mistake fixed in the setup dialog.)
+            If Not String.IsNullOrEmpty(PictureString) Then
                 XPictures = XElement.Parse(PictureString)
             Else
-                Throw New ASCOM.DriverException
+                TL.LogMessage("ReadImageFromCamera", "the camera returned an empty content-browse response")
+                Throw New ASCOM.DriverException("The camera returned an empty image-list response")
             End If
 
             Dim items As IEnumerable(Of XElement) =
@@ -1681,7 +1778,7 @@ Public Class Camera
 
                 End Try
                 Dim writeStream As IO.FileStream
-                writeStream = New FileStream(TempPath & Images.Substring(Images.Length - 13), IO.FileMode.OpenOrCreate)
+                writeStream = New FileStream(TempPath & LocalNameFor(Images), IO.FileMode.OpenOrCreate)
                 If nRead > 0 Then
                     writeStream.Position = nRead
                 End If
@@ -1690,7 +1787,7 @@ Public Class Camera
                 Try
                     Do
                         Dim readBytes(buflen - 1) As Byte
-                        CurrentPercentCompleted = Math.Min(100 * nRead / 8000000, 100) 'assuming a jpg is not longer than 8MB
+                        CurrentPercentCompleted = Math.Min(nRead \ 80000, 100) 'assuming a jpg is not longer than 8MB (nRead\80000 avoids the Int32 overflow of 100*nRead on >21MB RAW)
                         bytesread = theResponse.GetResponseStream.Read(readBytes, 0, buflen)
 
                         nRead = nRead + bytesread
@@ -1733,7 +1830,7 @@ Public Class Camera
             If ReadoutMode = 1 Then 'RAW . needs libraw conversion
                 Try
 
-                    Dim imagepath = TempPath & Images.Substring(Images.Length - 13)
+                    Dim imagepath = TempPath & LocalNameFor(Images)
                     TiffFileName = imagepath.Substring(0, imagepath.Length() - 3) + "tif"
 
                     Dim libraw_data_t As IntPtr
@@ -1756,14 +1853,14 @@ Public Class Camera
                         libraw_dcraw_ppm_tiff_writer32(libraw_data_t, TiffFileName)
                         libraw_close32(libraw_data_t)
                     End If
-                    My.Computer.FileSystem.DeleteFile(TempPath & Images.Substring(Images.Length - 13))
+                    My.Computer.FileSystem.DeleteFile(TempPath & LocalNameFor(Images))
                 Catch e As Exception
                     TL.LogMessage("Converting to tiff via DCRAW", Images & " file not found")
                 End Try
             Else 'JPG image. VB can translate into TIFF natively
                 Try
 
-                    Dim imagepath = TempPath & Images.Substring(Images.Length - 13)
+                    Dim imagepath = TempPath & LocalNameFor(Images)
                     Dim jpg = Image.FromFile(imagepath)
 
                     TiffFileName = imagepath.Substring(0, imagepath.Length() - 3) + "tif"
@@ -1777,16 +1874,37 @@ Public Class Camera
             End If
 
         Catch ex As Exception
-            TL.LogMessage("error in reading image", "error in reading image")
+            ' Log what actually failed. This used to log the fixed string "error in
+            ' reading image" and drop ex entirely, so a download failure left no way to
+            ' tell a DLNA browse miss from an HTTP error from a disk write - the state
+            ' went to cameraError with no diagnosis anywhere.
+            TL.LogMessage("error in reading image", ex.GetType().Name & ": " & ex.Message)
+            If ex.InnerException IsNot Nothing Then
+                TL.LogMessage("error in reading image", "inner: " & ex.InnerException.GetType().Name & ": " & ex.InnerException.Message)
+            End If
             cameraImageReady = False
             TL.LogMessage("Imageready", "False")
-            CurrentState = CameraStates.cameraIdle
+            ' Surface the failure as cameraError (was cameraIdle) so a client polling
+            ' CameraState sees the error instead of hanging on ImageReady=False.
+            CurrentState = CameraStates.cameraError
             Exit Sub
         End Try
 
-        CurrentState = CameraStates.cameraIdle
-        cameraImageReady = True
-        TL.LogMessage("Imageready", "true")
+        If cameraAborted Then ' aborted while downloading/converting - don't hand back an image
+            cameraImageReady = False
+            CurrentState = CameraStates.cameraIdle
+            TL.LogMessage("Imageready", "False (aborted)")
+        ElseIf Not String.IsNullOrEmpty(TiffFileName) AndAlso IO.File.Exists(TiffFileName) Then
+            CurrentState = CameraStates.cameraIdle
+            cameraImageReady = True
+            TL.LogMessage("Imageready", "true")
+        Else
+            ' Conversion failed (no TIFF): don't report ImageReady=True and then throw
+            ' FileNotFound from ImageArray - report the error state instead.
+            cameraImageReady = False
+            CurrentState = CameraStates.cameraError
+            TL.LogMessage("Imageready", "False (no TIFF produced)")
+        End If
 
     End Sub
 
