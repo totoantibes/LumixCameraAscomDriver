@@ -156,6 +156,7 @@ Public Class SetupDialogForm
                         InitUI()
                     End Using
                 End If
+                RefreshTransferFormats()   ' the offered formats differ per transport
                 RefreshLiveViewButton()
             End Sub
         AddHandler CBCameraIPAddress.SelectedIndexChanged, Sub(s, e) RefreshLiveViewButton()
@@ -163,6 +164,31 @@ Public Class SetupDialogForm
 
     ''' <summary>True once the LAN discovery has been run for this dialog.</summary>
     Private _discoveryDone As Boolean
+
+    ''' <summary>
+    ''' Fill the transfer-format combo from the modes the selected transport can deliver.
+    ''' The designer hardcodes JPG/RAW/Thumb, but USB Standard can only produce RAW and
+    ''' USB Extended only RAW or JPG - offering the rest let the user pick something the
+    ''' driver would silently ignore. Keeps the current choice when it is still valid,
+    ''' otherwise falls back to RAW.
+    ''' </summary>
+    Private Sub RefreshTransferFormats()
+        Dim wanted As String = TryCast(CBReadoutMode.SelectedItem, String)
+        If String.IsNullOrEmpty(wanted) Then wanted = My.Settings.TransferFormat
+
+        Dim allowed As ArrayList = Camera.ReadoutModesFor(SelectedMode)
+        CBReadoutMode.BeginUpdate()
+        CBReadoutMode.Items.Clear()
+        For Each m As String In allowed
+            CBReadoutMode.Items.Add(m)
+        Next
+        CBReadoutMode.EndUpdate()
+
+        Dim keep As Integer = CBReadoutMode.FindStringExact(If(wanted, ""))
+        If keep < 0 Then keep = CBReadoutMode.FindStringExact("RAW")
+        If keep < 0 Then keep = 0
+        CBReadoutMode.SelectedIndex = keep
+    End Sub
 
     ''' <summary>Hourglass while the LAN scan runs - it is not instant.</summary>
     Private NotInheritable Class WaitCursorScope
@@ -354,10 +380,10 @@ Public Class SetupDialogForm
             CBShutterSpeed.SelectedIndex = 58 ' Bulb shutter speed
         End If
 
-        ' Set default value for CBReadoutMode
-        If CBReadoutMode.Items.Count > 0 Then
-            CBReadoutMode.SelectedIndex = 2 ' Thumbnail readout mode
-        End If
+        ' Offer only the transfer formats this transport can actually deliver, and
+        ' default to RAW rather than the designer's hardcoded index 2 (Thumb) - which is
+        ' why a fresh setup came up reporting a 1440x1080 sensor.
+        RefreshTransferFormats()
 
 
 

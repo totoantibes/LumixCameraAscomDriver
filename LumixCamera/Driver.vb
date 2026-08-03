@@ -182,9 +182,6 @@ Public Class Camera
     Public ROM = {"JPG", "RAW", "Thumb"}
     Private JPEGPixelOffset As Int16 = 20
     Public ROMAL As New ArrayList
-    ' RAW first so the default index 0 is the mode that always works over USB.
-    Public ROMALUsbStandard As New ArrayList(New String() {"RAW"})
-    Public ROMALUsbExtended As New ArrayList(New String() {"RAW", "JPG"})
     Public ISOTableAL As New ArrayList
     Public Shared Models As New Hashtable
     Public Shared CurrentROM As UShort
@@ -1390,9 +1387,20 @@ Public Class Camera
     ''' for it. Advertising all three over USB offered choices that silently did nothing.
     ''' </summary>
     Private Function ActiveReadoutModes() As ArrayList
-        If My.Settings.ConnectionMode = "USBExtended" Then Return ROMALUsbExtended
-        If My.Settings.ConnectionMode = "USB" Then Return ROMALUsbStandard
-        Return ROMAL
+        Return ReadoutModesFor(My.Settings.ConnectionMode)
+    End Function
+
+    ''' <summary>
+    ''' The readout modes a given transport can deliver. Shared so the setup dialog
+    ''' offers exactly what the driver will honour - it used to show a fixed
+    ''' JPG/RAW/Thumb list from the designer regardless of transport.
+    ''' </summary>
+    Public Shared Function ReadoutModesFor(connectionMode As String) As ArrayList
+        Select Case connectionMode
+            Case "USBExtended" : Return New ArrayList(New String() {"RAW", "JPG"})
+            Case "USB" : Return New ArrayList(New String() {"RAW"})
+            Case Else : Return New ArrayList(New String() {"JPG", "RAW", "Thumb"})
+        End Select
     End Function
 
     ''' <summary>Name of the selected readout mode, or "RAW" if the index is unusable.</summary>
@@ -1565,9 +1573,17 @@ Public Class Camera
             pixelSize = p                     ' PixelSizeX/Y in microns
             sensormmx = p * w / 1000.0        ' keep sensor-mm consistent with pitch
             sensormmy = p * h / 1000.0
-            CurrentROM = 0                    ' RAW is index 0 in the USB mode lists; set the
-            '                                   field, not the property, whose WiFi branch
-            '                                   posts cam.cgi.
+            ' Honour the transfer format chosen in the setup dialog, falling back to RAW
+            ' (index 0 in the USB lists). Set the field, not the property, whose WiFi
+            ' branch posts cam.cgi.
+            Dim usbModes As ArrayList = ActiveReadoutModes()
+            Dim romIdx As Integer = usbModes.IndexOf(My.Settings.TransferFormat)
+            If romIdx < 0 Then romIdx = usbModes.IndexOf("RAW")
+            If romIdx < 0 Then romIdx = 0
+            CurrentROM = CUShort(romIdx)
+            If My.Settings.ConnectionMode = "USBExtended" Then
+                UsbTransport.SetImageQuality(CStr(usbModes(romIdx)) = "RAW")
+            End If
             connectedState = True
             TL.LogMessage("Connected Set", "USB connected: " & MODEL & " (" & w & "x" & h & ")")
         Catch ex As Exception
