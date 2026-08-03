@@ -53,7 +53,15 @@ Public Class SetupDialogForm
 
         ' Add any initialization after the InitializeComponent() call.
         CBResolution.DataSource = New BindingSource(Camera.ResolutionTable, Nothing)
-        CBISO.DataSource = New BindingSource(Camera.ISOTable, Nothing)
+        ' Offer the same entries ASCOM Gain indexes into: numeric ISOs only. The raw
+        ' ISOTable still holds "auto"/"i_iso", so binding to it would offer values the
+        ' gain list no longer contains and the saved ISO would not resolve.
+        Dim selectableIso As New ArrayList
+        For Each isoValue As String In Camera.ISOTable
+            Dim numericIso As Integer
+            If Integer.TryParse(isoValue, numericIso) Then selectableIso.Add(isoValue)
+        Next
+        CBISO.DataSource = New BindingSource(selectableIso, Nothing)
         For i = 0 To 58
             CBShutterSpeed.Items.Add(Camera.ShutterTable(i, 1))
         Next
@@ -185,10 +193,10 @@ Public Class SetupDialogForm
 
 
         If CBISO.Items.Count > 0 Then
-
-
-
-            CBISO.SelectedIndex = 18 ' 3200 ISO
+            ' Select by value, not by a hardcoded position: index 18 meant "3200" only
+            ' while "auto"/"i_iso" padded the front of the list.
+            Dim iso3200 As Integer = CBISO.FindStringExact("3200")
+            CBISO.SelectedIndex = If(iso3200 >= 0, iso3200, 0)
         End If
 
 
