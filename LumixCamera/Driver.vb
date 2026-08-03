@@ -1414,8 +1414,15 @@ Public Class Camera
         End Set
     End Property
 
+    ' The camera reports err_busy on get_content_info until it has finished writing the
+    ' frame; ~20s is comfortably longer than a RAW commit observed on a GH5S over WiFi.
+    Private Const CONTENT_READY_WAIT_MS As Integer = 500
+    Private Const CONTENT_READY_RETRIES As Integer = 40
+
     Private Shared Function NumberPix() As String
         Dim response As String = SendLumixMessage(NUMPIX)
+        ' err_busy / err_param etc: not ready (or refused) - report "not available".
+        If response IsNot Nothing AndAlso response.Contains("err") Then Return ""
         ' SendLumixMessage returns "" (or Nothing) whenever the request fails, and
         ' XElement.Parse("") throws "XmlException: Root element is missing". That escaped
         ' as the reported cause of every failed download, hiding the real one: the
@@ -1439,8 +1446,22 @@ Public Class Camera
     Private Shared Function GetPix(num As Int16) As String
         SendLumixMessage(PLAYMODE)
         Dim Start As Int16 = 0
+        ' Right after a capture the camera answers get_content_info with
+        ' <result>err_busy</result> while it is still committing the file - longest for
+        ' RAW. NumberPix() then returns "", and 'NumPix - num' threw
+        ' InvalidCastException ("" -> Double). Wait for a real count instead; give up
+        ' with "" so the caller raises a proper DriverException.
         Dim NumPix As String = NumberPix()
-        Dim SoapMsg As String = SoapEnvelop(Math.Max(NumPix - num, 0), num)
+        Dim waits As Integer = 0
+        Do While String.IsNullOrEmpty(NumPix) AndAlso waits < CONTENT_READY_RETRIES
+            Thread.Sleep(CONTENT_READY_WAIT_MS)
+            waits += 1
+            NumPix = NumberPix()
+        Loop
+        If String.IsNullOrEmpty(NumPix) Then Return ""
+        Dim total As Integer
+        If Not Integer.TryParse(NumPix, total) Then Return ""
+        Dim SoapMsg As String = SoapEnvelop(Math.Max(total - num, 0), num)
         Dim Stream As System.IO.StreamWriter
         Dim HTTPReq As HttpWebRequest
 
