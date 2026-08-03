@@ -713,7 +713,8 @@ Public Class Camera
         Get
             Dim m_version As Version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version
             ' TODO customise this driver description
-            Dim s_driverInfo As String = "Lumix Wifi Ascom driver. Version: " + m_version.Major.ToString() + "." + m_version.Minor.ToString()
+            ' Not "Wifi" any more - the driver also talks to the camera over USB.
+            Dim s_driverInfo As String = "Lumix ASCOM driver (WiFi + USB). Version: " + m_version.Major.ToString() + "." + m_version.Minor.ToString()
             TL.LogMessage("DriverInfo Get", s_driverInfo)
             Return s_driverInfo
         End Get
