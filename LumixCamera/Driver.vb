@@ -1147,6 +1147,13 @@ Public Class Camera
                 TL.LogMessage("ImageArray Get", "Throwing InvalidOperationException because of a call to ImageArray before the first image has been taken!")
                 Throw New ASCOM.InvalidOperationException("Call to ImageArray before the first image has been taken!")
             End If
+            ' Already built for this exposure: hand back the same array. The TIFF was
+            ' deleted after the first read, so re-decoding it is impossible - and ASCOM
+            ' allows ImageArray to be read more than once per exposure.
+            If cameraImageArray IsNot Nothing Then
+                TL.LogMessage("ImageArray Get", "returning the array already built for this exposure")
+                Return cameraImageArray
+            End If
             CurrentState = CameraStates.cameraDownload
             Dim Tiffimagefile As IO.FileStream
             Tiffimagefile = New FileStream(TiffFileName, IO.FileMode.Open)
@@ -1205,7 +1212,11 @@ Public Class Camera
             End Try
 
             TL.LogMessage("ImageArray Get", "getting the Array")
-            cameraImageReady = False
+            ' Do NOT clear cameraImageReady here. Reading the image must not consume it:
+            ' ASCOM keeps ImageReady true until the next StartExposure, and a client may
+            ' read ImageArray and ImageArrayVariant for the same exposure. Clearing it
+            ' made the very next ImageArrayVariant throw "before the first image has been
+            ' taken" (ConformU flagged exactly that). StartExposure resets the flag.
             CurrentState = CameraStates.cameraIdle
 
             Return cameraImageArray
@@ -1219,6 +1230,12 @@ Public Class Camera
                 Throw New ASCOM.InvalidOperationException("Call to ImageArrayVariant before the first image has been taken!")
             End If
             CurrentState = CameraStates.cameraDownload
+            ' A client may read the variant without reading ImageArray first; build it
+            ' then, rather than dereferencing a Nothing array (which surfaced as a raw
+            ' NullReferenceException instead of an ASCOM exception).
+            If cameraImageArray Is Nothing Then
+                Dim ignored As Object = Me.ImageArray
+            End If
             ReDim cameraImageArrayVariant(cameraNumX - 1, cameraNumY - 1)
             For i As Integer = 0 To cameraNumY - 1
                 For j As Integer = 0 To cameraNumX - 1
@@ -1525,6 +1542,10 @@ Public Class Camera
 
         cameraImageReady = False
         cameraAborted = False
+        ' Drop the previous exposure's decoded array so ImageArray rebuilds from the new
+        ' TIFF rather than returning the cached one.
+        cameraImageArray = Nothing
+        cameraImageArrayVariant = Nothing
         cameraLastExposureDuration = Duration
         exposureStart = DateTime.Now
         SendLumixMessage(RECMODE) 'makes sure it is not in playmode...
