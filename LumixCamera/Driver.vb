@@ -692,8 +692,14 @@ Public Class Camera
                 IPAddress = My.Settings.IPAddress
                 TempPath = NormalisePath(My.Settings.TempPath)
                 CurrentSpeed = My.Settings.Speed
-                ReadoutMode = ROMAL.IndexOf(My.Settings.TransferFormat)
-                If ReadoutMode < 0 Then ReadoutMode = 1 ' default to RAW when TransferFormat is unset/invalid (else sensor size stays 0)
+                ' Resolve and clamp BEFORE assigning: TransferFormat can be unset or stale,
+                ' and IndexOf then returns -1. Assigning that to the property first and
+                ' checking afterwards pushes -1 through the setter, which indexes ROM()
+                ' with it - so an unset TransferFormat made Connected throw instead of
+                ' falling back to RAW.
+                Dim romIndex As Integer = ROMAL.IndexOf(My.Settings.TransferFormat)
+                If romIndex < 0 Then romIndex = 1 ' default to RAW (else sensor size stays 0)
+                ReadoutMode = CShort(romIndex)
                 Gain = Math.Max(0, ISOTableAL.IndexOf(My.Settings.ISO))
                 SendLumixMessage(SHUTTERSPEED + ShutterRaw(CurrentSpeed))
                 If Camera.MODEL.Contains("S1") Then 'full frame bodies.
