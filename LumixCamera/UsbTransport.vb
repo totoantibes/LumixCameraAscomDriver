@@ -78,6 +78,16 @@ Public Class UsbTransport
         Return False
     End Function
 
+    ''' <summary>End any capture in progress (ASCOM AbortExposure/StopExposure).</summary>
+    Public Shared Sub AbortCapture()
+        If _cam IsNot Nothing Then
+            Try
+                _cam.RequestAbort()
+            Catch
+            End Try
+        End If
+    End Sub
+
     Public Shared Sub Disconnect()
         If _cam IsNot Nothing Then
             Try

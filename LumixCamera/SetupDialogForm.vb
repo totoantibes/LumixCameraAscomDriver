@@ -114,14 +114,16 @@ Public Class SetupDialogForm
 
         ' Retain the saved choice when the hardware still supports it; otherwise fall
         ' back to what is actually available now.
+        ' A cabled camera outranks a saved "WiFi": the body cannot be on both at once, so
+        ' a USB camera means the WiFi side is gone. Honouring the stale choice made the
+        ' dialog scan the LAN for a camera that had moved to USB and sit there until it
+        ' timed out before the user could pick USB by hand.
         Dim saved As String = My.Settings.ConnectionMode
         Dim preselect As String
         If saved = "USBExtended" AndAlso usbPresent AndAlso tetherPresent Then
             preselect = "USBExtended"
         ElseIf saved = "USB" AndAlso usbPresent Then
             preselect = "USB"
-        ElseIf saved = "WiFi" Then
-            preselect = "WiFi"
         ElseIf usbPresent AndAlso tetherPresent Then
             preselect = "USBExtended"
         ElseIf usbPresent Then
@@ -136,9 +138,37 @@ Public Class SetupDialogForm
         ' Re-check on a mode change AND on an IP change - in WiFi the IP only appears
         ' once InitUI has run, which is after this constructor.
         RefreshLiveViewButton()
-        AddHandler CBConnectionMode.SelectedIndexChanged, Sub(s, e) RefreshLiveViewButton()
+        AddHandler CBConnectionMode.SelectedIndexChanged,
+            Sub(s, e)
+                ' Discovery runs at Load only when WiFi is the starting mode. If the user
+                ' picks WiFi later, run it then - once - so the IP list is populated
+                ' without making every USB session pay for a LAN scan.
+                If SelectedMode = "WiFi" AndAlso Not _discoveryDone Then
+                    _discoveryDone = True
+                    Using New WaitCursorScope(Me)
+                        InitUI()
+                    End Using
+                End If
+                RefreshLiveViewButton()
+            End Sub
         AddHandler CBCameraIPAddress.SelectedIndexChanged, Sub(s, e) RefreshLiveViewButton()
     End Sub
+
+    ''' <summary>True once the LAN discovery has been run for this dialog.</summary>
+    Private _discoveryDone As Boolean
+
+    ''' <summary>Hourglass while the LAN scan runs - it is not instant.</summary>
+    Private NotInheritable Class WaitCursorScope
+        Implements IDisposable
+        Private ReadOnly _form As Form
+        Public Sub New(f As Form)
+            _form = f
+            _form.Cursor = Cursors.WaitCursor
+        End Sub
+        Public Sub Dispose() Implements IDisposable.Dispose
+            _form.Cursor = Cursors.Default
+        End Sub
+    End Class
 
     ''' <summary>
     ''' Enable/disable the Live View button for the current mode and IP. Called from the
@@ -301,8 +331,13 @@ Public Class SetupDialogForm
 
     Private Sub SetupDialogForm_Load(sender As System.Object, e As System.EventArgs) Handles MyBase.Load ' Form load event handler
         ' Retrieve current values of user settings from the ASCOM Profile.
-        ' Only run the WiFi LAN discovery in WiFi mode (it is a slow, pointless scan over USB).
-        If SelectedMode = "WiFi" Then InitUI()
+        ' Only run the WiFi LAN discovery in WiFi mode (it is a slow, pointless scan over
+        ' USB, and the preselect already prefers a cabled camera). Switching to WiFi
+        ' later runs it then - see the mode-changed handler.
+        If SelectedMode = "WiFi" Then
+            _discoveryDone = True
+            InitUI()
+        End If
         ' Discovery has now had its chance to find a camera IP, so re-evaluate the Live
         ' View button: at construction time there was no IP yet and it stayed disabled.
         RefreshLiveViewButton()

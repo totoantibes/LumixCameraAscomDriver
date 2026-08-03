@@ -1560,6 +1560,11 @@ Public Class Camera
                     CurrentState = CameraStates.cameraError
                     TL.LogMessage("USB capture", "conversion produced no TIFF")
                 End If
+            ElseIf res IsNot Nothing AndAlso res.Error = "Aborted." Then
+                ' A capture the client aborted is not a failure - go back to idle, or
+                ' every AbortExposure leaves the camera reporting cameraError.
+                CurrentState = CameraStates.cameraIdle
+                TL.LogMessage("USB capture", "aborted by the client")
             Else
                 CurrentState = CameraStates.cameraError
                 TL.LogMessage("USB capture failed", If(res IsNot Nothing, res.Error, "null result"))
@@ -1954,6 +1959,13 @@ Public Class Camera
     End Property
 
     Public Sub StopExposure() Implements ICameraV2.StopExposure
+        If My.Settings.ConnectionMode.StartsWith("USB") Then
+            ' No cam.cgi over USB. Ending the capture also matters for safety: a
+            ' disconnect while the SDK still has a capture in flight faults the native
+            ' library (an AccessViolation that takes the host process down).
+            UsbTransport.AbortCapture()
+            Return
+        End If
         SendLumixMessage(SHUTTERSTOP)
     End Sub
 

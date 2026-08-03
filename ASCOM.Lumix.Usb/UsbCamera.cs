@@ -26,6 +26,14 @@ namespace ASCOM.Lumix.Usb
         private IntPtr _devInfoBuf = IntPtr.Zero;
         private bool _connected;
 
+        /// <summary>Serialises captures against Disconnect - see Disconnect().</summary>
+        private readonly object _opGate = new object();
+        private volatile bool _abortRequested;
+        private const int DisconnectWaitMs = 15000;
+
+        /// <summary>Why the last operation gave up, if it did. Null when all is well.</summary>
+        public string LastError { get; private set; }
+
         private readonly ManualResetEventSlim _captureDone = new ManualResetEventSlim(false);
         private string _captureDir;
         private CaptureResult _result;
@@ -144,12 +152,15 @@ namespace ASCOM.Lumix.Usb
         public CaptureResult CaptureOneShot(string outputDir, int timeoutMs)
         {
             if (!_connected) throw new InvalidOperationException("Not connected.");
-            BeginCapture(outputDir);
-            var rc = MakeRecCtrl(NativeMethods.TAG_RELEASE_ONESHOT);
-            uint err;
-            if (NativeMethods.Rec_Ctrl_Release(ref rc, out err) == 0)
-                return new CaptureResult { Success = false, Error = $"Rec_Ctrl_Release failed (err 0x{err:X8})." };
-            return AwaitObject(timeoutMs);
+            lock (_opGate)   // Disconnect must not close the session under this
+            {
+                BeginCapture(outputDir);
+                var rc = MakeRecCtrl(NativeMethods.TAG_RELEASE_ONESHOT);
+                uint err;
+                if (NativeMethods.Rec_Ctrl_Release(ref rc, out err) == 0)
+                    return new CaptureResult { Success = false, Error = $"Rec_Ctrl_Release failed (err 0x{err:X8})." };
+                return AwaitObject(timeoutMs);
+            }
         }
 
         /// <summary>
@@ -160,19 +171,29 @@ namespace ASCOM.Lumix.Usb
         {
             if (!_connected) throw new InvalidOperationException("Not connected.");
             if (!NativeMethods.Extended) return new CaptureResult { Success = false, Error = "Bulb requires Extended (Tether) mode." };
-            BeginCapture(outputDir);
-            if (!EnsureBulb()) return new CaptureResult { Success = false, Error = "Could not put the camera into BULB." };
+            lock (_opGate)   // Disconnect must not close the session under this
+            {
+                BeginCapture(outputDir);
+                if (!EnsureBulb()) return new CaptureResult { Success = false, Error = "Could not put the camera into BULB." };
 
-            uint err;
-            var open = MakeRecCtrl(NativeMethods.TAG_BULB_START);
-            if (NativeMethods.Rec_Ctrl_Release(ref open, out err) == 0)
-                return new CaptureResult { Success = false, Error = $"BULB_START failed (err 0x{err:X8})." };
-            Thread.Sleep((int)Math.Max(0, seconds * 1000.0));
-            var stop = MakeRecCtrl(NativeMethods.TAG_BULB_STOP);
-            NativeMethods.Rec_Ctrl_Release(ref stop, out err);
-            var fin = MakeRecCtrl(NativeMethods.TAG_BULB_FINALIZE);
-            NativeMethods.Rec_Ctrl_Release(ref fin, out err);
-            return AwaitObject(timeoutMs);
+                uint err;
+                var open = MakeRecCtrl(NativeMethods.TAG_BULB_START);
+                if (NativeMethods.Rec_Ctrl_Release(ref open, out err) == 0)
+                    return new CaptureResult { Success = false, Error = $"BULB_START failed (err 0x{err:X8})." };
+
+                // Sleep in slices so an abort ends the exposure promptly instead of
+                // making a client wait out a long bulb before it can disconnect.
+                var until = DateTime.UtcNow.AddSeconds(Math.Max(0, seconds));
+                while (!_abortRequested && DateTime.UtcNow < until)
+                    Thread.Sleep(Math.Min(200, Math.Max(1, (int)(until - DateTime.UtcNow).TotalMilliseconds)));
+
+                var stop = MakeRecCtrl(NativeMethods.TAG_BULB_STOP);
+                NativeMethods.Rec_Ctrl_Release(ref stop, out err);
+                var fin = MakeRecCtrl(NativeMethods.TAG_BULB_FINALIZE);
+                NativeMethods.Rec_Ctrl_Release(ref fin, out err);
+                if (_abortRequested) return new CaptureResult { Success = false, Error = "Aborted." };
+                return AwaitObject(timeoutMs);
+            }
         }
 
         // Refresh the SS range so BULB (0xFFFFFFFF) sticks instead of clamping to 60 s.
@@ -213,7 +234,14 @@ namespace ASCOM.Lumix.Usb
             catch { }
         }
 
-        private void BeginCapture(string outputDir) { _captureDir = outputDir; _result = null; _captureDone.Reset(); }
+        private void BeginCapture(string outputDir)
+        {
+            _captureDir = outputDir;
+            _result = null;
+            _abortRequested = false;
+            LastError = null;
+            _captureDone.Reset();
+        }
 
         private CaptureResult AwaitObject(int timeoutMs)
         {
@@ -352,23 +380,63 @@ namespace ASCOM.Lumix.Usb
             return _ssRaw[bestIdx];
         }
 
+        /// <summary>
+        /// End any capture in progress so a Disconnect does not have to wait for it.
+        /// For a bulb that means closing the shutter; the worker then unwinds normally.
+        /// </summary>
+        public void RequestAbort()
+        {
+            _abortRequested = true;
+            if (!NativeMethods.Extended) return;
+            try
+            {
+                uint err;
+                var stop = MakeRecCtrl(NativeMethods.TAG_BULB_STOP);
+                NativeMethods.Rec_Ctrl_Release(ref stop, out err);
+                var fin = MakeRecCtrl(NativeMethods.TAG_BULB_FINALIZE);
+                NativeMethods.Rec_Ctrl_Release(ref fin, out err);
+            }
+            catch { }
+            _captureDone.Set();   // release anyone blocked in AwaitObject
+        }
+
+        /// <summary>
+        /// Close the session. Waits for an in-flight capture first: the SDK delivers
+        /// images on its own callback thread, and closing the session (or freeing the
+        /// device-info buffer it still references) underneath that thread faults the
+        /// native library - an AccessViolation that kills the whole host process, not a
+        /// catchable exception. If the capture will not finish in time we deliberately
+        /// leave the session open rather than crash the client.
+        /// </summary>
         public void Disconnect()
         {
             if (!_connected) return;
-            StopLiveView();
-            ExitBulb();
-            uint err;
+
+            RequestAbort();
+            bool exclusive = Monitor.TryEnter(_opGate, DisconnectWaitMs);
+            if (!exclusive)
+            {
+                LastError = "a capture was still running; the USB session was left open rather than risk a crash";
+                return;
+            }
             try
             {
-                NativeMethods.LMX_func_api_Delete_CallBackInfo(NativeMethods.EV_OBJCT_ADD);
-                NativeMethods.LMX_func_api_Delete_CallBackInfo(NativeMethods.EV_OBJCT_REQ_TRNSFER);
-                NativeMethods.LMX_func_api_Delete_CallBackInfo(NativeMethods.EV_REC_CTRL_RELEASE);
-                NativeMethods.Close_Session(out err);
-                NativeMethods.Close_Device(out err);
+                StopLiveView();
+                ExitBulb();
+                uint err;
+                try
+                {
+                    NativeMethods.LMX_func_api_Delete_CallBackInfo(NativeMethods.EV_OBJCT_ADD);
+                    NativeMethods.LMX_func_api_Delete_CallBackInfo(NativeMethods.EV_OBJCT_REQ_TRNSFER);
+                    NativeMethods.LMX_func_api_Delete_CallBackInfo(NativeMethods.EV_REC_CTRL_RELEASE);
+                    NativeMethods.Close_Session(out err);
+                    NativeMethods.Close_Device(out err);
+                }
+                catch { }
+                _connected = false;
+                FreeBuf();
             }
-            catch { }
-            _connected = false;
-            FreeBuf();
+            finally { Monitor.Exit(_opGate); }
         }
 
         private void FreeBuf()
