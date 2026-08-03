@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Runtime.InteropServices;
 
 namespace ASCOM.Lumix.Usb
@@ -23,14 +23,36 @@ namespace ASCOM.Lumix.Usb
         internal static IntPtr Ctx = IntPtr.Zero;          // device context (Tether), threaded into every ext op
         internal static IntPtr CapBuf = IntPtr.Zero;       // 16 KB scratch for *_GetCapability
         internal static IntPtr DevBuf = IntPtr.Zero;       // 256 KB extended device-info buffer
-        private static byte[] _ctxB, _capB, _devB;
-        private static GCHandle _ctxH, _capH, _devH;
+        // (the pinned managed arrays these used to point at are gone - see EnsureTetherBuffers)
 
+        /// <summary>
+        /// Allocate the buffers the SDK keeps pointers to. These are UNMANAGED on
+        /// purpose (AllocHGlobal, never freed) rather than pinned managed arrays.
+        ///
+        /// The SDK retains Ctx for the life of the session and touches it from its own
+        /// worker thread. A pinned managed array lives on the GC heap, which is torn
+        /// down during CLR shutdown - so a late touch by that thread reads freed heap
+        /// and faults natively. That matched the symptom exactly: a host that had
+        /// loaded this SDK died with 0xC0000005 at process exit, after every operation
+        /// had already succeeded and the session had been closed, while a host that
+        /// only ever used WiFi exited cleanly.
+        ///
+        /// Unmanaged blocks are process-lifetime and outlive the CLR, so a late touch
+        /// hits memory that is still mapped. Deliberately never freed: the DLL is never
+        /// unloaded and cannot be told to stop using them.
+        /// </summary>
         internal static void EnsureTetherBuffers()
         {
-            if (Ctx == IntPtr.Zero) { _ctxB = new byte[8192]; _ctxH = GCHandle.Alloc(_ctxB, GCHandleType.Pinned); Ctx = _ctxH.AddrOfPinnedObject(); }
-            if (CapBuf == IntPtr.Zero) { _capB = new byte[16384]; _capH = GCHandle.Alloc(_capB, GCHandleType.Pinned); CapBuf = _capH.AddrOfPinnedObject(); }
-            if (DevBuf == IntPtr.Zero) { _devB = new byte[262144]; _devH = GCHandle.Alloc(_devB, GCHandleType.Pinned); DevBuf = _devH.AddrOfPinnedObject(); }
+            if (Ctx == IntPtr.Zero) Ctx = AllocZeroed(CTX_SIZE);
+            if (CapBuf == IntPtr.Zero) CapBuf = AllocZeroed(CAPA_BUF_SIZE);
+            if (DevBuf == IntPtr.Zero) DevBuf = AllocZeroed(DEVBUF_SIZE);
+        }
+
+        private static IntPtr AllocZeroed(int bytes)
+        {
+            IntPtr p = Marshal.AllocHGlobal(bytes);
+            for (int i = 0; i < bytes; i++) Marshal.WriteByte(p, i, 0);
+            return p;
         }
 
         // ---- device-info layouts ----
@@ -44,6 +66,8 @@ namespace ASCOM.Lumix.Usb
         internal const int EXT_INFO_BASE = 520;
 
         // ---- capability layout ----
+        internal const int CTX_SIZE = 8192;
+        internal const int DEVBUF_SIZE = 262144;
         internal const int CAPA_BUF_SIZE = 16384;
         internal const int CAPA_NUMOFVAL_OFF = 0;
         internal const int CAPA_SUPPORTVAL_OFF = 4;
