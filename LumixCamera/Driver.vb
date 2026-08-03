@@ -647,6 +647,35 @@ Public Class Camera
         Throw New MethodNotImplementedException("CommandString")
     End Function
 
+    ''' <summary>
+    ''' Map a shutter speed as the setup dialog displays it ("B", "2s", "125") to the raw
+    ''' cam.cgi code in ShutterTable column 0 ("16384/256", "-256/256", "1792/256").
+    ''' My.Settings.Speed is data-bound to the combo's Text, so it holds the DISPLAY
+    ''' string. The dialog's OK handler sends column 0, but connect re-sent the display
+    ''' string, which the camera rejects with err_param (verified on a GH5S: value=B and
+    ''' value=2s both err_param; 16384/256 and -256/256 both ok) - so the saved speed was
+    ''' silently never applied on connect. Returns the input unchanged if not in the table.
+    ''' </summary>
+    Private Shared Function ShutterRaw(displaySpeed As String) As String
+        If String.IsNullOrEmpty(displaySpeed) Then Return displaySpeed
+        For i As Integer = 0 To ShutterTable.GetLength(0) - 1
+            If ShutterTable(i, 1) = displaySpeed Then Return ShutterTable(i, 0)
+        Next
+        Return displaySpeed
+    End Function
+
+    ''' <summary>
+    ''' The download path builds filenames as TempPath &amp; name, so a folder without a
+    ''' trailing separator writes into the PARENT with the folder name glued onto the file
+    ''' ("C:\pics" + "DO1234.RW2" -> "C:\picsDO1234.RW2"). The dialog appends a separator;
+    ''' a hand-edited profile value does not.
+    ''' </summary>
+    Private Shared Function NormalisePath(p As String) As String
+        If String.IsNullOrEmpty(p) Then Return p
+        If p.EndsWith(IO.Path.DirectorySeparatorChar) OrElse p.EndsWith(IO.Path.AltDirectorySeparatorChar) Then Return p
+        Return p & IO.Path.DirectorySeparatorChar
+    End Function
+
     Public Property Connected() As Boolean Implements ICameraV2.Connected
         Get
             TL.LogMessage("Connected Get", IsConnected.ToString())
@@ -661,12 +690,12 @@ Public Class Camera
                 TL.LogMessage("Connected Set", "Connecting to IP Address " + IPAddress)
                 ' TODO connect to the device
                 IPAddress = My.Settings.IPAddress
-                TempPath = My.Settings.TempPath
+                TempPath = NormalisePath(My.Settings.TempPath)
                 CurrentSpeed = My.Settings.Speed
                 ReadoutMode = ROMAL.IndexOf(My.Settings.TransferFormat)
                 If ReadoutMode < 0 Then ReadoutMode = 1 ' default to RAW when TransferFormat is unset/invalid (else sensor size stays 0)
                 Gain = Math.Max(0, ISOTableAL.IndexOf(My.Settings.ISO))
-                SendLumixMessage(SHUTTERSPEED + CurrentSpeed)
+                SendLumixMessage(SHUTTERSPEED + ShutterRaw(CurrentSpeed))
                 If Camera.MODEL.Contains("S1") Then 'full frame bodies.
                     sensormmx = 36
                     sensormmy = 24
