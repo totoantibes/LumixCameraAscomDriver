@@ -1,4 +1,4 @@
-' --------------------------------------------------------------------------------
+﻿' --------------------------------------------------------------------------------
 ' ASCOM Camera driver for Lumix
 
 'This driver provides an interface to the Lumix http over wifi remote control protocol
@@ -605,6 +605,26 @@ Public Class Camera
         ' you need something to ensure that only one command is in progress at a time
 
         Throw New MethodNotImplementedException("CommandString")
+    End Function
+
+    ''' <summary>
+    ''' Local filename for a camera download URL. This was
+    ''' Images.Substring(Images.Length - 13) - a fixed 13-character tail that assumed
+    ''' one exact name length. "DO02648350.RW2" is 14 characters, so the leading "D"
+    ''' was silently dropped on every download; any other naming (a longer stem, a
+    ''' different extension, a query string) would slice mid-name instead.
+    ''' All four call sites must agree on the name or the convert/delete steps miss
+    ''' the file, which is the other reason to have one function for it.
+    ''' </summary>
+    Private Shared Function LocalNameFor(url As String) As String
+        If String.IsNullOrEmpty(url) Then Return url
+        Dim name As String = url
+        Dim q As Integer = name.IndexOfAny(New Char() {"?"c, "#"c})
+        If q >= 0 Then name = name.Substring(0, q)
+        Dim slash As Integer = name.LastIndexOfAny(New Char() {"/"c, "\"c})
+        If slash >= 0 Then name = name.Substring(slash + 1)
+        If name = "" Then Return "capture.dat"
+        Return name
     End Function
 
     Public Property Connected() As Boolean Implements ICameraV2.Connected
@@ -1693,7 +1713,7 @@ Public Class Camera
 
                 End Try
                 Dim writeStream As IO.FileStream
-                writeStream = New FileStream(TempPath & Images.Substring(Images.Length - 13), IO.FileMode.OpenOrCreate)
+                writeStream = New FileStream(TempPath & LocalNameFor(Images), IO.FileMode.OpenOrCreate)
                 If nRead > 0 Then
                     writeStream.Position = nRead
                 End If
@@ -1745,7 +1765,7 @@ Public Class Camera
             If ReadoutMode = 1 Then 'RAW . needs libraw conversion
                 Try
 
-                    Dim imagepath = TempPath & Images.Substring(Images.Length - 13)
+                    Dim imagepath = TempPath & LocalNameFor(Images)
                     TiffFileName = imagepath.Substring(0, imagepath.Length() - 3) + "tif"
 
                     Dim libraw_data_t As IntPtr
@@ -1768,14 +1788,14 @@ Public Class Camera
                         libraw_dcraw_ppm_tiff_writer32(libraw_data_t, TiffFileName)
                         libraw_close32(libraw_data_t)
                     End If
-                    My.Computer.FileSystem.DeleteFile(TempPath & Images.Substring(Images.Length - 13))
+                    My.Computer.FileSystem.DeleteFile(TempPath & LocalNameFor(Images))
                 Catch e As Exception
                     TL.LogMessage("Converting to tiff via DCRAW", Images & " file not found")
                 End Try
             Else 'JPG image. VB can translate into TIFF natively
                 Try
 
-                    Dim imagepath = TempPath & Images.Substring(Images.Length - 13)
+                    Dim imagepath = TempPath & LocalNameFor(Images)
                     Dim jpg = Image.FromFile(imagepath)
 
                     TiffFileName = imagepath.Substring(0, imagepath.Length() - 3) + "tif"
