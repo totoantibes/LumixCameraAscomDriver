@@ -315,7 +315,7 @@ Public Class Camera
     '        {"16384/256", "B"}
     '}
 
-    Public Shared ResolutionTable = {"10.2", "12.1", "16.0", "16.05", "20.0", "20.3", "24.2", "47.3", "25.2", "20.1"}
+    Public Shared ResolutionTable = {"10.2", "12.1", "16.0", "16.05", "20.0", "20.3", "24.2", "47.3", "25.2", "20.1", "44.3"}
 
 
     '
@@ -390,6 +390,31 @@ Public Class Camera
             Models.Add("G100", "20.3")
             Models.Add("FZ1000", "20.1")
 
+            ' 2023-2025 bodies. Keys are the cam.cgi model string (Panasonic "DC-"
+            ' prefix stripped, matching the entries above). Both the "M2" and "II"
+            ' spellings are registered because the exact string a body reports is
+            ' not confirmed for all of them; a wrong key is harmless (the connect
+            ' path falls back to a default resolution rather than crashing).
+            '   24.2MP full-frame sensor (S5II family / S9 / S1II / BS1H)
+            Models.Add("S5M2", "24.2") : Models.Add("S5II", "24.2")    ' S5 II
+            Models.Add("S5M2X", "24.2") : Models.Add("S5IIX", "24.2")  ' S5 IIX
+            Models.Add("S9", "24.2")
+            Models.Add("S1M2", "24.2") : Models.Add("S1II", "24.2")    ' S1 II (24.1MP)
+            Models.Add("S1M2E", "24.2") : Models.Add("S1IIE", "24.2")  ' S1 IIE
+            Models.Add("BS1H", "24.2")
+            '   25.2MP Micro Four Thirds sensor (G9 II / GH7)
+            Models.Add("G9M2", "25.2") : Models.Add("G9II", "25.2")    ' G9 II
+            Models.Add("GH7", "25.2")
+            '   44.3MP full-frame sensor (S1R II) - dims from digicamdb
+            Models.Add("S1RM2", "44.3") : Models.Add("S1RII", "44.3")  ' S1R II
+            '   20.3MP Micro Four Thirds bodies previously missing from the list
+            Models.Add("GH5M2", "20.3") : Models.Add("GH5II", "20.3")  ' GH5 II
+            Models.Add("G110", "20.3")
+            Models.Add("G100D", "20.3")
+            ' NOTE: FZ82/FZ80 (issue #8) is an 18.1MP 1/2.3" bridge compact - it
+            ' needs its own resolution bucket and sensor size, not added here; its
+            ' crash-on-select is handled by the connect-path guard regardless.
+
         End If
         '"10.2", "12.1", "16.0", "16.05", "20.0", "20.3", "24.2", "47.3"
 
@@ -438,6 +463,10 @@ Public Class Camera
         Resolutions(9)._Y = 4354
 
 
+        Resolutions(10)._resolution = "44.3" ' S1R II full sensor resolution
+        Resolutions(10)._X = 8151
+        Resolutions(10)._Y = 5434
+
         ResolutionsJPG(0)._resolution = "12.1"
         ResolutionsJPG(0)._X = 3991
         ResolutionsJPG(0)._Y = 2998
@@ -480,6 +509,10 @@ Public Class Camera
         ResolutionsJPG(9)._Y = 4336
 
 
+        ResolutionsJPG(10)._resolution = "44.3" ' S1R II max image resolution
+        ResolutionsJPG(10)._X = 8144
+        ResolutionsJPG(10)._Y = 5424
+
         ResolutionsThumb(0)._resolution = "12.1"
         ResolutionsThumb(0)._X = 1440
         ResolutionsThumb(0)._Y = 1080
@@ -521,6 +554,10 @@ Public Class Camera
         ResolutionsThumb(9)._X = 1440
         ResolutionsThumb(9)._Y = 1080
 
+        ResolutionsThumb(10)._resolution = "44.3"
+        ResolutionsThumb(10)._X = 1440
+        ResolutionsThumb(10)._Y = 1080
+
 
         'TODO: Implement your additional construction here
 
@@ -545,15 +582,50 @@ Public Class Camera
         '    System.Windows.Forms.MessageBox.Show("Already connected, just press OK")
         'End If
 
-        Using F As SetupDialogForm = New SetupDialogForm(Me)
+        Using F As SetupDialogForm = New SetupDialogForm(Me, IsConnected)
             Dim result As System.Windows.Forms.DialogResult = F.ShowDialog()
             If result = DialogResult.OK Then
                 My.Settings.Save()
+                If IsConnected Then
+                    ' Already connected: adopt the new settings on the live connection.
+                    ' Assigning Connected = True here would re-run the whole connect path
+                    ' and start a SECOND polling thread (one more per OK), while looking
+                    ' like it worked.
+                    ApplyLiveSettings()
+                End If
+                ' Deliberately do NOT connect when we were disconnected. Configuring is
+                ' not connecting: in ASCOM the client opens the connection, and it does so
+                ' immediately after this returns. Connecting here left a live session on
+                ' the instance the client is about to throw away - and over USB, where the
+                ' SDK allows one session per process, the client's own Connected = True
+                ' then failed with "OpenSession failed (err 0x00000000)".
+                ' The settings the dialog changed are already applied: it sends ISO,
+                ' shutter and quality to the camera itself when you press OK.
             Else
                 My.Settings.Reload()
             End If
-            Connected = True
         End Using
+    End Sub
+
+    ''' <summary>
+    ''' Adopt the settings the dialog just saved, without reconnecting. Only covers what
+    ''' can genuinely change mid-session: the dialog disables the IP and resolution
+    ''' controls while connected, because those define the connection and the reported
+    ''' sensor size.
+    ''' </summary>
+    Private Sub ApplyLiveSettings()
+        TempPath = NormalisePath(My.Settings.TempPath)
+        CurrentSpeed = My.Settings.Speed
+
+        Dim romIndex As Integer = ROMAL.IndexOf(My.Settings.TransferFormat)
+        If romIndex < 0 Then romIndex = 1 ' RAW
+        ReadoutMode = CShort(romIndex)    ' setter pushes the quality to the camera
+
+        Dim isoIndex As Integer = ISOTableAL.IndexOf(My.Settings.ISO)
+        If isoIndex >= 0 Then Gain = CShort(isoIndex) ' setter pushes the ISO
+
+        SendLumixMessage(SHUTTERSPEED + ShutterRaw(CurrentSpeed))
+        TL.LogMessage("SetupDialog", "applied settings to the live connection (no reconnect)")
     End Sub
 
     Public ReadOnly Property SupportedActions() As ArrayList Implements ICameraV2.SupportedActions
@@ -614,6 +686,35 @@ Public Class Camera
         Return name
     End Function
 
+    ''' <summary>
+    ''' Map a shutter speed as the setup dialog displays it ("B", "2s", "125") to the raw
+    ''' cam.cgi code in ShutterTable column 0 ("16384/256", "-256/256", "1792/256").
+    ''' My.Settings.Speed is data-bound to the combo's Text, so it holds the DISPLAY
+    ''' string. The dialog's OK handler sends column 0, but connect re-sent the display
+    ''' string, which the camera rejects with err_param (verified on a GH5S: value=B and
+    ''' value=2s both err_param; 16384/256 and -256/256 both ok) - so the saved speed was
+    ''' silently never applied on connect. Returns the input unchanged if not in the table.
+    ''' </summary>
+    Private Shared Function ShutterRaw(displaySpeed As String) As String
+        If String.IsNullOrEmpty(displaySpeed) Then Return displaySpeed
+        For i As Integer = 0 To ShutterTable.GetLength(0) - 1
+            If ShutterTable(i, 1) = displaySpeed Then Return ShutterTable(i, 0)
+        Next
+        Return displaySpeed
+    End Function
+
+    ''' <summary>
+    ''' The download path builds filenames as TempPath &amp; name, so a folder without a
+    ''' trailing separator writes into the PARENT with the folder name glued onto the file
+    ''' ("C:\pics" + "DO1234.RW2" -> "C:\picsDO1234.RW2"). The dialog appends a separator;
+    ''' a hand-edited profile value does not.
+    ''' </summary>
+    Private Shared Function NormalisePath(p As String) As String
+        If String.IsNullOrEmpty(p) Then Return p
+        If p.EndsWith(IO.Path.DirectorySeparatorChar) OrElse p.EndsWith(IO.Path.AltDirectorySeparatorChar) Then Return p
+        Return p & IO.Path.DirectorySeparatorChar
+    End Function
+
     Public Property Connected() As Boolean Implements ICameraV2.Connected
         Get
             TL.LogMessage("Connected Get", IsConnected.ToString())
@@ -627,18 +728,35 @@ Public Class Camera
                 TL.LogMessage("Connected Set", "Connecting to IP Address " + IPAddress)
                 ' TODO connect to the device
                 IPAddress = My.Settings.IPAddress
-                TempPath = My.Settings.TempPath
+                TempPath = NormalisePath(My.Settings.TempPath)
                 CurrentSpeed = My.Settings.Speed
-                ReadoutMode = ROMAL.IndexOf(My.Settings.TransferFormat)
+                ' Resolve and clamp BEFORE assigning: TransferFormat can be unset or stale,
+                ' and IndexOf then returns -1. Assigning that to the property first and
+                ' checking afterwards pushes -1 through the setter, which indexes ROM()
+                ' with it - so an unset TransferFormat made Connected throw instead of
+                ' falling back to RAW.
+                Dim romIndex As Integer = ROMAL.IndexOf(My.Settings.TransferFormat)
+                If romIndex < 0 Then romIndex = 1 ' default to RAW (else sensor size stays 0)
+                ReadoutMode = CShort(romIndex)
                 Gain = Math.Max(0, ISOTableAL.IndexOf(My.Settings.ISO))
-                SendLumixMessage(SHUTTERSPEED + CurrentSpeed)
+                SendLumixMessage(SHUTTERSPEED + ShutterRaw(CurrentSpeed))
                 If MODEL.Contains("S1") Then 'full frame bodies.
                     sensormmx = 36
                     sensormmy = 24
                 End If
 
                 Dim index As Integer = Array.FindIndex(Resolutions, Function(f) f._resolution = My.Settings.Resolution)
-
+                If index < 0 Then
+                    ' Resolution not set/matched (e.g. connected from SharpCap without
+                    ' opening the setup dialog, or an unlisted body such as FZ82). Fall
+                    ' back to the model's known resolution, then to the first entry, so
+                    ' the arrays below are never indexed with -1 (previously a hard crash).
+                    Dim modelRes As String = TryCast(Models(MODEL), String)
+                    If Not String.IsNullOrEmpty(modelRes) Then
+                        index = Array.FindIndex(Resolutions, Function(f) f._resolution = modelRes)
+                    End If
+                    If index < 0 Then index = 0
+                End If
 
                 Select Case ReadoutMode
                     Case 0 'jpg
@@ -1523,11 +1641,15 @@ Public Class Camera
 
     'formats a message to be sent to the maera
     Public Function SendLumixMessage(LumixMessage As String) As String
+        ' No IP configured yet (e.g. a host connected without opening setup):
+        ' don't build an invalid "http:///..." URI, which throws an *uncaught*
+        ' UriFormatException. Just no-op with an empty response.
+        If String.IsNullOrEmpty(IPAddress) Then Return ""
         Dim request = WebRequest.Create("http://" + IPAddress + "/" + LumixMessage)
         Dim myStreamReader As StreamReader
         Dim SendStatus As Integer = -1
         Dim statusCode As HttpStatusCode
-        Dim ResponseText As String
+        Dim ResponseText As String = ""
         Try
             Dim myWebResponse = CType(request.GetResponse(), HttpWebResponse)
             myStreamReader = New StreamReader(myWebResponse.GetResponseStream())
@@ -1555,10 +1677,10 @@ Public Class Camera
                 End Using
             End If
         End Try
-        ' Every failure path used to fall off the end returning Nothing (the long-standing
-        ' BC42105 warning on this function). Callers concatenate and parse the result, so
-        ' return an empty string instead of a null reference.
-        Return ""
+        ' Always return a string (never Nothing) so callers doing .Contains(...) /
+        ' XElement.Parse(...) don't hit a NullReferenceException. ResponseText is
+        ' only assigned on some paths, hence the coalesce.
+        Return If(ResponseText, "")
     End Function
 
 
