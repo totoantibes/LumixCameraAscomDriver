@@ -605,12 +605,15 @@ Public Class Camera
                     ' and start a SECOND polling thread (one more per OK), while looking
                     ' like it worked.
                     ApplyLiveSettings()
-                Else
-                    ' Only connect when the user accepted the dialog. Previously this ran
-                    ' unconditionally, so cancelling (or just opening Properties with no IP
-                    ' set) forced a connect + started the poll thread as a side effect.
-                    Connected = True
                 End If
+                ' Deliberately do NOT connect when we were disconnected. Configuring is
+                ' not connecting: in ASCOM the client opens the connection, and it does so
+                ' immediately after this returns. Connecting here left a live session on
+                ' the instance the client is about to throw away - and over USB, where the
+                ' SDK allows one session per process, the client's own Connected = True
+                ' then failed with "OpenSession failed (err 0x00000000)".
+                ' The settings the dialog changed are already applied: it sends ISO,
+                ' shutter and quality to the camera itself when you press OK.
             Else
                 My.Settings.Reload()
             End If
