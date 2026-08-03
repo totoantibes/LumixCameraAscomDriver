@@ -88,6 +88,7 @@ Imports System.Runtime.Remoting.Messaging
 Imports System.Linq
 Imports System.Runtime.InteropServices
 Imports System.Security.Cryptography.X509Certificates
+Imports System.Web.Script.Serialization
 
 'Imports UPNPLib
 
@@ -315,7 +316,8 @@ Public Class Camera
     '        {"16384/256", "B"}
     '}
 
-    Public Shared ResolutionTable = {"10.2", "12.1", "16.0", "16.05", "20.0", "20.3", "24.2", "47.3", "25.2", "20.1", "44.3"}
+    ' Populated from cameras.json by LoadCameraTable() (was a hardcoded literal).
+    Public Shared ResolutionTable As String() = New String() {}
 
 
     '
@@ -352,211 +354,7 @@ Public Class Camera
             If Integer.TryParse(isoValue, numericIso) Then ISOTableAL.Add(isoValue)
         Next
 
-        If Models.Contains("GX9") = False Then
-            Models.Add("GX9", "20.3")
-            Models.Add("GF10", "16.0")
-            Models.Add("GH5S", "10.2")
-            Models.Add("G9", "20.0")
-            Models.Add("G90", "20.0")
-            Models.Add("GH5", "20.3")
-            Models.Add("GF9", "16.0")
-            Models.Add("GX800", "16.0")
-            Models.Add("GX850", "16.0")
-            Models.Add("G80", "16.0")
-            Models.Add("G81", "16.0")
-            Models.Add("G85", "16.0")
-            Models.Add("GX80", "16.0")
-            Models.Add("GX85", "16.0")
-            Models.Add("G95", "20.0")
-            Models.Add("GF8", "16.0")
-            Models.Add("GX8", "20.3")
-            Models.Add("G7", "16.0")
-            Models.Add("GF7", "16.0")
-            Models.Add("GM5", "16.0")
-            Models.Add("GM1", "16.0")
-            Models.Add("GX7", "16.0")
-            Models.Add("GH4", "16.05")
-            Models.Add("GH6", "25.2")
-            Models.Add("GH3", "16.05")
-            Models.Add("GH2", "16.05")
-            Models.Add("GH1", "12.1")
-            Models.Add("G6", "16.05")
-            Models.Add("GF6", "16.0")
-            Models.Add("S1", "24.2")
-            Models.Add("S5", "24.2")
-            Models.Add("S1R", "47.3")
-            Models.Add("S1H", "24.2")
-            Models.Add("BGH1", "10.2")
-            Models.Add("G100", "20.3")
-            Models.Add("FZ1000", "20.1")
-
-            ' 2023-2025 bodies. Keys are the cam.cgi model string (Panasonic "DC-"
-            ' prefix stripped, matching the entries above). Both the "M2" and "II"
-            ' spellings are registered because the exact string a body reports is
-            ' not confirmed for all of them; a wrong key is harmless (the connect
-            ' path falls back to a default resolution rather than crashing).
-            '   24.2MP full-frame sensor (S5II family / S9 / S1II / BS1H)
-            Models.Add("S5M2", "24.2") : Models.Add("S5II", "24.2")    ' S5 II
-            Models.Add("S5M2X", "24.2") : Models.Add("S5IIX", "24.2")  ' S5 IIX
-            Models.Add("S9", "24.2")
-            Models.Add("S1M2", "24.2") : Models.Add("S1II", "24.2")    ' S1 II (24.1MP)
-            Models.Add("S1M2E", "24.2") : Models.Add("S1IIE", "24.2")  ' S1 IIE
-            Models.Add("BS1H", "24.2")
-            '   25.2MP Micro Four Thirds sensor (G9 II / GH7)
-            Models.Add("G9M2", "25.2") : Models.Add("G9II", "25.2")    ' G9 II
-            Models.Add("GH7", "25.2")
-            '   44.3MP full-frame sensor (S1R II) - dims from digicamdb
-            Models.Add("S1RM2", "44.3") : Models.Add("S1RII", "44.3")  ' S1R II
-            '   20.3MP Micro Four Thirds bodies previously missing from the list
-            Models.Add("GH5M2", "20.3") : Models.Add("GH5II", "20.3")  ' GH5 II
-            Models.Add("G110", "20.3")
-            Models.Add("G100D", "20.3")
-            ' NOTE: FZ82/FZ80 (issue #8) is an 18.1MP 1/2.3" bridge compact - it
-            ' needs its own resolution bucket and sensor size, not added here; its
-            ' crash-on-select is handled by the connect-path guard regardless.
-
-        End If
-        '"10.2", "12.1", "16.0", "16.05", "20.0", "20.3", "24.2", "47.3"
-
-        Resolutions(0)._resolution = "12.1"
-        Resolutions(0)._X = 4011
-        Resolutions(0)._Y = 3016
-
-        Resolutions(1)._resolution = "16.0"
-        Resolutions(1)._X = 4612
-        Resolutions(1)._Y = 3468
-
-        Resolutions(2)._resolution = "20.0"
-        Resolutions(2)._X = 5200
-        Resolutions(2)._Y = 3910
-
-        Resolutions(3)._resolution = "10.2"
-        Resolutions(3)._X = 3697
-        Resolutions(3)._Y = 2780
-
-        Resolutions(4)._resolution = "16.05"
-        Resolutions(4)._X = 4620
-        Resolutions(4)._Y = 3474
-
-        Resolutions(5)._resolution = "20.3"
-        Resolutions(5)._X = 5196
-        Resolutions(5)._Y = 3907
-
-        Resolutions(6)._resolution = "24.2"
-        Resolutions(6)._X = 6026
-        Resolutions(6)._Y = 4017
-
-        Resolutions(7)._resolution = "47.3"
-        Resolutions(7)._X = 8368
-        Resolutions(7)._Y = 5584
-
-        Resolutions(8)._resolution = "20.1"
-        Resolutions(8)._X = 5492
-        Resolutions(8)._Y = 3661
-
-        Resolutions(9)._resolution = "25.2"
-        Resolutions(9)._X = 5791
-        Resolutions(9)._Y = 4354
-
-        Resolutions(9)._resolution = "25.2"
-        Resolutions(9)._X = 5791
-        Resolutions(9)._Y = 4354
-
-
-        Resolutions(10)._resolution = "44.3" ' S1R II full sensor resolution
-        Resolutions(10)._X = 8151
-        Resolutions(10)._Y = 5434
-
-        ResolutionsJPG(0)._resolution = "12.1"
-        ResolutionsJPG(0)._X = 3991
-        ResolutionsJPG(0)._Y = 2998
-
-        ResolutionsJPG(1)._resolution = "16.0"
-        ResolutionsJPG(1)._X = 4592
-        ResolutionsJPG(1)._Y = 3448  '3468
-
-        ResolutionsJPG(2)._resolution = "20.0"
-        ResolutionsJPG(2)._X = 5184
-        ResolutionsJPG(2)._Y = 3888
-
-        ResolutionsJPG(3)._resolution = "10.2"
-        ResolutionsJPG(3)._X = 3680
-        ResolutionsJPG(3)._Y = 2760
-
-
-        ResolutionsJPG(4)._resolution = "16.05"
-        ResolutionsJPG(4)._X = 4608
-        ResolutionsJPG(4)._Y = 3456
-
-        ResolutionsJPG(5)._resolution = "20.3"
-        ResolutionsJPG(5)._X = 5196
-        ResolutionsJPG(5)._Y = 3907
-
-        ResolutionsJPG(6)._resolution = "24.2"
-        ResolutionsJPG(6)._X = 6000
-        ResolutionsJPG(6)._Y = 4000
-
-        ResolutionsJPG(7)._resolution = "47.3"
-        ResolutionsJPG(7)._X = 8368
-        ResolutionsJPG(7)._Y = 5584
-
-        ResolutionsJPG(8)._resolution = "20.1"
-        ResolutionsJPG(8)._X = 5472
-        ResolutionsJPG(8)._Y = 3648
-
-        ResolutionsJPG(9)._resolution = "25.2"
-        ResolutionsJPG(9)._X = 5776
-        ResolutionsJPG(9)._Y = 4336
-
-
-        ResolutionsJPG(10)._resolution = "44.3" ' S1R II max image resolution
-        ResolutionsJPG(10)._X = 8144
-        ResolutionsJPG(10)._Y = 5424
-
-        ResolutionsThumb(0)._resolution = "12.1"
-        ResolutionsThumb(0)._X = 1440
-        ResolutionsThumb(0)._Y = 1080
-
-        ResolutionsThumb(1)._resolution = "16.0"
-        ResolutionsThumb(1)._X = 1440
-        ResolutionsThumb(1)._Y = 1080
-
-        ResolutionsThumb(2)._resolution = "20.0"
-        ResolutionsThumb(2)._X = 1440
-        ResolutionsThumb(2)._Y = 1080
-
-        ResolutionsThumb(3)._resolution = "10M"
-        ResolutionsThumb(3)._X = 1440
-        ResolutionsThumb(3)._Y = 1080
-
-        ResolutionsThumb(4)._resolution = "16.05"
-        ResolutionsThumb(4)._X = 1440
-        ResolutionsThumb(4)._Y = 1080
-
-        ResolutionsThumb(5)._resolution = "20.3"
-        ResolutionsThumb(5)._X = 1440
-        ResolutionsThumb(5)._Y = 1080
-
-        ResolutionsThumb(6)._resolution = "24.2"
-        ResolutionsThumb(6)._X = 1440
-        ResolutionsThumb(6)._Y = 1080
-
-        ResolutionsThumb(7)._resolution = "47.3"
-        ResolutionsThumb(7)._X = 1440
-        ResolutionsThumb(7)._Y = 1080
-
-        ResolutionsThumb(8)._resolution = "20.1"
-        ResolutionsThumb(8)._X = 1440
-        ResolutionsThumb(8)._Y = 1080
-
-
-        ResolutionsThumb(9)._resolution = "25.2"
-        ResolutionsThumb(9)._X = 1440
-        ResolutionsThumb(9)._Y = 1080
-
-        ResolutionsThumb(10)._resolution = "44.3"
-        ResolutionsThumb(10)._X = 1440
-        ResolutionsThumb(10)._Y = 1080
+        LoadCameraTable()
 
 
         'TODO: Implement your additional construction here
@@ -892,9 +690,73 @@ Public Class Camera
         Dim _Y As Int32
     End Structure
 
-    Private ReadOnly Resolutions(ResolutionTable.Length) As MFTResolution ' = New MFTResolution(("12M", 4011, 3016), ("16M", 4612, 3468}, {"20M", 5200, 3910}) '5200 x 3910 4011 x 3016
-    Private ReadOnly ResolutionsJPG(ResolutionTable.Length) As MFTResolution ' = New MFTResolution(("12M", 4011, 3016), ("16M", 4612, 3468}, {"20M", 5200, 3910}) '5200 x 3910 4011 x 3016
-    Private ReadOnly ResolutionsThumb(ResolutionTable.Length) As MFTResolution ' = New MFTResolution(("12M", 4011, 3016), ("16M", 4612, 3468}, {"20M", 5200, 3910}) '5200 x 3910 4011 x 3016
+    ' Populated from cameras.json by LoadCameraTable() (was fixed-size, hardcoded).
+    Private Resolutions() As MFTResolution = New MFTResolution() {}
+    Private ResolutionsJPG() As MFTResolution = New MFTResolution() {}
+    Private ResolutionsThumb() As MFTResolution = New MFTResolution() {}
+
+    ''' <summary>
+    ''' Populate the camera/resolution tables from cameras.json. Building all three
+    ''' resolution arrays from one ordered source keeps them index-aligned by
+    ''' construction, so there are no hand-maintained parallel arrays to drift.
+    ''' </summary>
+    Private Sub LoadCameraTable()
+        Try
+            Dim json As String = LoadCameraJson()
+            If String.IsNullOrEmpty(json) Then Return
+            Dim root = DirectCast(New JavaScriptSerializer().DeserializeObject(json), Dictionary(Of String, Object))
+
+            Dim thumb = DirectCast(root("thumb"), Dictionary(Of String, Object))
+            Dim tX As Integer = CInt(thumb("x")), tY As Integer = CInt(thumb("y"))
+
+            Dim resArr = DirectCast(root("resolutions"), Object())
+            Dim n As Integer = resArr.Length
+            ReDim Resolutions(n - 1)
+            ReDim ResolutionsJPG(n - 1)
+            ReDim ResolutionsThumb(n - 1)
+            Dim table(n - 1) As String
+            For i As Integer = 0 To n - 1
+                Dim e = DirectCast(resArr(i), Dictionary(Of String, Object))
+                Dim cls As String = e("class").ToString()
+                table(i) = cls
+                Resolutions(i) = New MFTResolution With {._resolution = cls, ._X = CInt(e("rawX")), ._Y = CInt(e("rawY"))}
+                ResolutionsJPG(i) = New MFTResolution With {._resolution = cls, ._X = CInt(e("jpgX")), ._Y = CInt(e("jpgY"))}
+                ResolutionsThumb(i) = New MFTResolution With {._resolution = cls, ._X = tX, ._Y = tY}
+            Next
+            ResolutionTable = table
+
+            Dim modelsD = DirectCast(root("models"), Dictionary(Of String, Object))
+            Models.Clear()
+            For Each kv As KeyValuePair(Of String, Object) In modelsD
+                Models(kv.Key) = kv.Value.ToString()
+            Next
+        Catch ex As Exception
+            Try : TL.LogMessage("LoadCameraTable", "Failed: " & ex.Message) : Catch : End Try
+        End Try
+    End Sub
+
+    ''' <summary>Read cameras.json: an editable override next to the DLL, else the embedded copy.</summary>
+    Private Shared Function LoadCameraJson() As String
+        Try
+            Dim dllDir As String = IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)
+            Dim ext As String = IO.Path.Combine(dllDir, "cameras.json")
+            If IO.File.Exists(ext) Then Return IO.File.ReadAllText(ext)
+        Catch
+        End Try
+        Try
+            Dim asm = System.Reflection.Assembly.GetExecutingAssembly()
+            Dim resName As String = asm.GetManifestResourceNames().FirstOrDefault(Function(nm) nm.EndsWith("cameras.json"))
+            If resName IsNot Nothing Then
+                Using s = asm.GetManifestResourceStream(resName)
+                    Using r As New IO.StreamReader(s)
+                        Return r.ReadToEnd()
+                    End Using
+                End Using
+            End If
+        Catch
+        End Try
+        Return ""
+    End Function
 
 
 

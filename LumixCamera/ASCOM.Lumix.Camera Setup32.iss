@@ -38,6 +38,8 @@ Name: "{cf}\ASCOM\Uninstall\Camera\ASCOM.Lumix.Camera"
 Source: "C:\Users\rober\Source\Repos\totoantibes\LumixCameraAscomDriver\LumixCamera\bin\x86\Release\ASCOM.Lumix.Camera.dll"; DestDir: "{app}"
 Source: "C:\Users\rober\Source\Repos\totoantibes\LumixCameraAscomDriver\LumixCamera\bin\x86\Release\Libraw.dll"; DestDir: "{app}"
 Source: "C:\Users\rober\Source\Repos\totoantibes\LumixCameraAscomDriver\LumixCamera\bin\x86\Release\Libraw32.dll"; DestDir: "{app}"
+; Editable camera/resolution table (driver falls back to an embedded copy if absent)
+Source: "C:\Users\rober\Source\Repos\totoantibes\LumixCameraAscomDriver\LumixCamera\bin\x86\Release\cameras.json"; DestDir: "{app}"
 ; Require a read-me HTML to appear after installation, maybe driver's Help doc
 Source: "C:\Users\rober\Source\Repos\totoantibes\LumixCameraAscomDriver\readme.md"; DestDir: "{app}"; Flags: isreadme
 ; TODO: Add other files needed by your driver here (add subfolders above)

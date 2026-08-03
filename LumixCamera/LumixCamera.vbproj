@@ -170,6 +170,7 @@
     <Reference Include="System.Windows.Presentation" />
     <Reference Include="System.XML" />
     <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Web.Extensions" />
     <Reference Include="WindowsBase" />
   </ItemGroup>
   <ItemGroup>
@@ -220,6 +221,14 @@
       <SubType>Designer</SubType>
       <DependentUpon>SetupDialogForm.vb</DependentUpon>
     </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Embedded as the built-in fallback, and copied next to the DLL as an
+         editable override so new cameras can be added without recompiling. -->
+    <EmbeddedResource Include="cameras.json" />
+    <Content Include="cameras.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />
