@@ -572,17 +572,29 @@ Public Class SetupDialogForm
     End Sub
 
     Private Sub SetupDialogForm_Load(sender As System.Object, e As System.EventArgs) Handles MyBase.Load ' Form load event handler
-        ' Retrieve current values of user settings from the ASCOM Profile
-        InitUI()
+        ' Retrieve current values of user settings from the ASCOM Profile.
+        ' Only run the WiFi LAN discovery in WiFi mode: it is a slow, pointless scan when
+        ' the camera is on the cable, and the preselect already prefers a cabled camera.
+        ' Choosing WiFi later runs it then, once - see the mode-changed handler.
+        If SelectedMode = "WiFi" Then
+            _discoveryDone = True
+            InitUI()
+        End If
 
-        ' Everything else can be pushed to a live camera, but these two define the
-        ' connection: the IP is what we are connected TO, and the resolution fixes the
-        ' reported sensor size, which ASCOM clients read once and cache. Disable them
-        ' rather than accept a change we would silently ignore until reconnect.
+        ' Discovery has now had its chance to find a camera IP, so re-evaluate the Live
+        ' View button: at construction time there was no IP yet and it stayed disabled.
+        RefreshLiveViewButton()
+
+        ' Everything else can be pushed to a live camera, but these define the
+        ' connection: the IP and transport are what we are connected TO, and the
+        ' resolution fixes the reported sensor size, which ASCOM clients read once and
+        ' cache. Disable them rather than accept edits we would silently ignore until
+        ' the next reconnect.
         If _connected Then
             CBCameraIPAddress.Enabled = False
             CBResolution.Enabled = False
-            Me.Text = Me.Text & " - connected (IP and resolution need a reconnect)"
+            If CBConnectionMode IsNot Nothing Then CBConnectionMode.Enabled = False
+            Me.Text = Me.Text & " - connected (IP, transport and resolution need a reconnect)"
         End If
         ' Set default value for CBShutterSpeed
         If CBShutterSpeed.Items.Count > 0 Then
