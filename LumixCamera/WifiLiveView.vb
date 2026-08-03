@@ -18,6 +18,38 @@ Public Class WifiLiveView
 
     Public Const DefaultPort As Integer = 49199
 
+    ''' <summary>
+    ''' The stream sizes the camera offers. Verified on a GH5S: "vga" gives 640x480
+    ''' (~26 KB/frame) and "qvga" gives 320x240 (~13 KB/frame); anything else is
+    ''' rejected with err_param. QVGA halves the bandwidth, which helps on a weak link.
+    ''' </summary>
+    Public Shared ReadOnly Sizes As String() = {"vga", "qvga"}
+
+    Private Const LIVEVIEWSIZE As String = "cam.cgi?mode=setsetting&type=liveviewsize&value="
+
+    ''' <summary>
+    ''' Ask the camera for a stream size. Safe to call while streaming - the camera
+    ''' switches on the fly. Returns False if it refuses.
+    ''' </summary>
+    Public Shared Function SetSize(size As String) As Boolean
+        If String.IsNullOrEmpty(size) Then Return False
+        Dim reply As String = Camera.SendLumixMessage(LIVEVIEWSIZE & size)
+        Return reply IsNot Nothing AndAlso reply.Contains("ok")
+    End Function
+
+    ''' <summary>The size the camera currently reports, or "" if it cannot be read.</summary>
+    Public Shared Function GetSize() As String
+        Dim reply As String = Camera.SendLumixMessage("cam.cgi?mode=getsetting&type=liveviewsize")
+        If reply Is Nothing Then Return ""
+        Dim marker As String = "liveviewsize="""
+        Dim i As Integer = reply.IndexOf(marker, StringComparison.Ordinal)
+        If i < 0 Then Return ""
+        i += marker.Length
+        Dim j As Integer = reply.IndexOf(""""c, i)
+        If j < 0 Then Return ""
+        Return reply.Substring(i, j - i)
+    End Function
+
     Private _udp As UdpClient
     Private _receiver As Thread
     Private _running As Boolean

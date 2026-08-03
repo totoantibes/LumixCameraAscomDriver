@@ -19,6 +19,7 @@ Public Class LiveViewForm
     Private _busy As Boolean
     Private ReadOnly _wifi As Boolean
     Private _wifiLv As WifiLiveView
+    Private _cbSize As ComboBox
 
     ''' <summary>
     ''' <paramref name="extended"/> selects the Tether ABI on USB. <paramref name="wifi"/>
@@ -66,6 +67,20 @@ Public Class LiveViewForm
                 Sub(s, e) Camera.SendLumixMessage(Camera.SHUTTERSPEED & Camera.ShutterTable(_cbShutter.SelectedIndex, 0))
             AddHandler _cbIso.SelectedIndexChanged,
                 Sub(s, e) Camera.SendLumixMessage(Camera.ISO & _cbIso.SelectedItem.ToString())
+
+            ' Stream-size selector: the camera offers VGA and QVGA, switchable while
+            ' streaming. QVGA halves the bandwidth on a weak link.
+            Me.Controls.Add(New Label With {.Text = "Size:", .Location = New Point(364, 522), .AutoSize = True,
+                                            .Anchor = AnchorStyles.Bottom Or AnchorStyles.Left})
+            _cbSize = New ComboBox With {.Location = New Point(404, 518), .Size = New Size(90, 24),
+                                         .DropDownStyle = ComboBoxStyle.DropDownList,
+                                         .Anchor = AnchorStyles.Bottom Or AnchorStyles.Left}
+            _cbSize.Items.AddRange(WifiLiveView.Sizes)
+            Dim current As String = WifiLiveView.GetSize()
+            _cbSize.SelectedIndex = Math.Max(0, _cbSize.FindStringExact(current))
+            AddHandler _cbSize.SelectedIndexChanged,
+                Sub(s, e) WifiLiveView.SetSize(_cbSize.SelectedItem.ToString())
+            Me.Controls.Add(_cbSize)
 
             _wifiLv = New WifiLiveView()
             If Not _wifiLv.Start() Then
