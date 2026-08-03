@@ -1814,7 +1814,14 @@ Public Class Camera
             End If
 
         Catch ex As Exception
-            TL.LogMessage("error in reading image", "error in reading image")
+            ' Log what actually failed. This used to log the fixed string "error in
+            ' reading image" and drop ex entirely, so a download failure left no way to
+            ' tell a DLNA browse miss from an HTTP error from a disk write - the state
+            ' went to cameraError with no diagnosis anywhere.
+            TL.LogMessage("error in reading image", ex.GetType().Name & ": " & ex.Message)
+            If ex.InnerException IsNot Nothing Then
+                TL.LogMessage("error in reading image", "inner: " & ex.InnerException.GetType().Name & ": " & ex.InnerException.Message)
+            End If
             cameraImageReady = False
             TL.LogMessage("Imageready", "False")
             ' Surface the failure as cameraError (was cameraIdle) so a client polling
