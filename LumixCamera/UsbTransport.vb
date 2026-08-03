@@ -34,6 +34,14 @@ Public Class UsbTransport
     ''' Extended loads the user's installed LUMIX Tether DLL (bulb / &gt;60 s).
     ''' </summary>
     Public Shared Sub Connect(extended As Boolean)
+        ' The Lumix USB SDK holds ONE session per process, and every Camera instance
+        ' shares this transport. A second Connect must therefore reuse the open session
+        ' rather than open another - opening a second one fails with
+        ' "OpenSession failed (err 0x00000000)".
+        ' This happens in normal use: the setup dialog connects when the user presses OK,
+        ' and then the client (NINA) connects its own Camera instance a moment later.
+        If _cam IsNot Nothing AndAlso _cam.IsConnected Then Return
+
         Dim dll As String
         If extended Then
             dll = TetherDllPath()
