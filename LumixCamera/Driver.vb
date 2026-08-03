@@ -595,18 +595,47 @@ Public Class Camera
         '    System.Windows.Forms.MessageBox.Show("Already connected, just press OK")
         'End If
 
-        Using F As SetupDialogForm = New SetupDialogForm()
+        Using F As SetupDialogForm = New SetupDialogForm(IsConnected)
             Dim result As System.Windows.Forms.DialogResult = F.ShowDialog()
             If result = DialogResult.OK Then
                 My.Settings.Save()
-                ' Only connect when the user accepted the dialog. Previously this ran
-                ' unconditionally, so cancelling (or just opening Properties with no IP
-                ' set) forced a connect + started the poll thread as a side effect.
-                Connected = True
+                If IsConnected Then
+                    ' Already connected: adopt the new settings on the live connection.
+                    ' Assigning Connected = True here would re-run the whole connect path
+                    ' and start a SECOND polling thread (one more per OK), while looking
+                    ' like it worked.
+                    ApplyLiveSettings()
+                Else
+                    ' Only connect when the user accepted the dialog. Previously this ran
+                    ' unconditionally, so cancelling (or just opening Properties with no IP
+                    ' set) forced a connect + started the poll thread as a side effect.
+                    Connected = True
+                End If
             Else
                 My.Settings.Reload()
             End If
         End Using
+    End Sub
+
+    ''' <summary>
+    ''' Adopt the settings the dialog just saved, without reconnecting. Only covers what
+    ''' can genuinely change mid-session: the dialog disables the IP and resolution
+    ''' controls while connected, because those define the connection and the reported
+    ''' sensor size.
+    ''' </summary>
+    Private Sub ApplyLiveSettings()
+        TempPath = NormalisePath(My.Settings.TempPath)
+        CurrentSpeed = My.Settings.Speed
+
+        Dim romIndex As Integer = ROMAL.IndexOf(My.Settings.TransferFormat)
+        If romIndex < 0 Then romIndex = 1 ' RAW
+        ReadoutMode = CShort(romIndex)    ' setter pushes the quality to the camera
+
+        Dim isoIndex As Integer = ISOTableAL.IndexOf(My.Settings.ISO)
+        If isoIndex >= 0 Then Gain = CShort(isoIndex) ' setter pushes the ISO
+
+        SendLumixMessage(SHUTTERSPEED + ShutterRaw(CurrentSpeed))
+        TL.LogMessage("SetupDialog", "applied settings to the live connection (no reconnect)")
     End Sub
 
     Public ReadOnly Property SupportedActions() As ArrayList Implements ICameraV2.SupportedActions

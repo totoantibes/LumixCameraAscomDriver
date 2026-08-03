@@ -61,7 +61,15 @@ Public Class SetupDialogForm
     ''' </summary>
     Const ERROR_INSUFFICIENT_BUFFER As Integer = 122
 
-    Public Sub New()
+    ''' <summary>
+    ''' True when the driver is already connected. Settings that define the connection
+    ''' itself cannot be changed live, so those controls are disabled - see
+    ''' SetupDialogForm_Load.
+    ''' </summary>
+    Private ReadOnly _connected As Boolean
+
+    Public Sub New(Optional connected As Boolean = False)
+        _connected = connected
 
         ' This call is required by the designer.
         InitializeComponent()
@@ -359,6 +367,16 @@ Public Class SetupDialogForm
     Private Sub SetupDialogForm_Load(sender As System.Object, e As System.EventArgs) Handles MyBase.Load ' Form load event handler
         ' Retrieve current values of user settings from the ASCOM Profile
         InitUI()
+
+        ' Everything else can be pushed to a live camera, but these two define the
+        ' connection: the IP is what we are connected TO, and the resolution fixes the
+        ' reported sensor size, which ASCOM clients read once and cache. Disable them
+        ' rather than accept a change we would silently ignore until reconnect.
+        If _connected Then
+            CBCameraIPAddress.Enabled = False
+            CBResolution.Enabled = False
+            Me.Text = Me.Text & " - connected (IP and resolution need a reconnect)"
+        End If
         ' Set default value for CBShutterSpeed
         If CBShutterSpeed.Items.Count > 0 Then
 
