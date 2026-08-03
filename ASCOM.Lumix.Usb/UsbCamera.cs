@@ -33,12 +33,16 @@ namespace ASCOM.Lumix.Usb
         private readonly List<double> _ssSeconds = new List<double>();
         private readonly List<long> _ssRaw = new List<long>();
         private readonly List<uint> _isoValues = new List<uint>();
+        private readonly List<uint> _isoNumbers = new List<uint>();
 
         public string ModelName { get; private set; }
         public bool IsConnected { get { return _connected; } }
         public bool IsExtended { get { return NativeMethods.Extended; } }
         public IReadOnlyList<double> ShutterSeconds { get { return _ssSeconds; } }
+        /// <summary>Raw ISO codes to pass back to the SDK, AUTO excluded.</summary>
         public IReadOnlyList<uint> IsoValues { get { return _isoValues; } }
+        /// <summary>The same entries as plain ISO numbers (160, 51200, ...) for display.</summary>
+        public IReadOnlyList<uint> IsoNumbers { get { return _isoNumbers; } }
 
         private UsbCamera() { _callback = OnNativeEvent; }
 
@@ -188,6 +192,27 @@ namespace ASCOM.Lumix.Usb
             return false;
         }
 
+        /// <summary>
+        /// Leave BULB before closing the session — the body keeps the setting across
+        /// connections, so a disconnect mid-bulb would strand it on B for the next client
+        /// (and for the camera's own dial). Best effort; never throws.
+        /// </summary>
+        private void ExitBulb()
+        {
+            if (!NativeMethods.Extended) return;   // only Extended can select BULB
+            try
+            {
+                uint e;
+                int cur;
+                if (NativeMethods.SS_Get_Param(out cur, out e) == 0) return;
+                if ((uint)cur != NativeMethods.SS_BULB) return;
+                double actual;
+                long raw = NearestShutterRaw(1.0, out actual);
+                NativeMethods.SS_Set_Param(raw != 0 ? raw : NativeMethods.SS_ONE_SECOND, out e);
+            }
+            catch { }
+        }
+
         private void BeginCapture(string outputDir) { _captureDir = outputDir; _result = null; _captureDone.Reset(); }
 
         private CaptureResult AwaitObject(int timeoutMs)
@@ -253,14 +278,35 @@ namespace ASCOM.Lumix.Usb
 
         public void ReadCapabilities()
         {
-            _ssSeconds.Clear(); _ssRaw.Clear(); _isoValues.Clear();
+            _ssSeconds.Clear(); _ssRaw.Clear(); _isoValues.Clear(); _isoNumbers.Clear();
             foreach (uint v in ReadEnumList(true))
             {
                 double sec = DecodeShutterSeconds(v);
                 if (sec <= 0) continue;
                 _ssSeconds.Add(sec); _ssRaw.Add(v);
             }
-            foreach (uint iso in ReadEnumList(false)) if (iso != 0) _isoValues.Add(iso);
+            foreach (uint raw in ReadEnumList(false))
+            {
+                uint iso = DecodeIso(raw);
+                if (iso == 0) continue;                // AUTO / i-ISO / unknown
+                _isoValues.Add(raw); _isoNumbers.Add(iso);
+            }
+        }
+
+        /// <summary>
+        /// Decode a raw ISO code to its plain value; 0 for AUTO / i-ISO / unknown.
+        /// The capability list mixes plain values with flagged extended ones — on a GH5S:
+        /// 0xFFFFFFFF=AUTO, 0x100000xx=extended low (80/100), 0xA0..0xC800=native 160..51200,
+        /// 0x200xxxxx=extended high (102400/204800).
+        /// </summary>
+        public static uint DecodeIso(uint raw)
+        {
+            if (raw == 0 || raw == NativeMethods.ISO_AUTO || raw == NativeMethods.ISO_INTELLIGENT) return 0;
+            uint flag = raw & NativeMethods.ISO_FLAG_MASK;
+            if (flag == 0) return raw;
+            if (flag == NativeMethods.ISO_FLAG_EXT_LOW || flag == NativeMethods.ISO_FLAG_EXT_HIGH)
+                return raw & ~NativeMethods.ISO_FLAG_MASK;
+            return 0;
         }
 
         private static uint[] ReadEnumList(bool shutter)
@@ -310,6 +356,7 @@ namespace ASCOM.Lumix.Usb
         {
             if (!_connected) return;
             StopLiveView();
+            ExitBulb();
             uint err;
             try
             {

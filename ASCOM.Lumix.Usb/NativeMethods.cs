@@ -57,6 +57,10 @@ namespace ASCOM.Lumix.Usb
         internal const uint TAG_BULB_START = 0x03000012, TAG_BULB_STOP = 0x03000013, TAG_BULB_FINALIZE = 0x03000019;
         internal const uint OBJ_FORMAT_JPEG = 1, OBJ_FORMAT_RAW = 2;
         internal const uint SS_BULB = 0xFFFFFFFF, SS_UNKNOWN = 0x0FFFFFFE, SS_AUTO = 0x0FFFFFFF;
+        internal const uint SS_ONE_SECOND = 0x800003E8;   // 1 s: whole seconds are (sec*1000)|0x80000000
+        // ISO capability codes: AUTO/i-ISO sentinels, plus a flag nibble marking extended lows/highs.
+        internal const uint ISO_AUTO = 0xFFFFFFFF, ISO_INTELLIGENT = 0xFFFFFFFE;
+        internal const uint ISO_FLAG_MASK = 0xFF000000, ISO_FLAG_EXT_LOW = 0x10000000, ISO_FLAG_EXT_HIGH = 0x20000000;
         internal const uint IMGQ_JPEG_FINE = 0, IMGQ_RAW = 3, IMGQ_RAW_JPEG = 4;
         internal const uint CARDLESS_TRNSFER_HDL = 0x12345678;
 

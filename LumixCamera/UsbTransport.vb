@@ -149,13 +149,13 @@ Public Class UsbTransport
         If _cam IsNot Nothing Then _cam.SetShutterByIndex(index)
     End Sub
 
-    ''' <summary>Supported ISO entries (index-labelled; raw codes aren't human values).</summary>
+    ''' <summary>Supported ISO values as plain numbers ("160", "51200"), in SetIsoIndex order.</summary>
     Public Shared Function IsoDisplay() As String()
-        If _cam Is Nothing OrElse _cam.IsoValues.Count = 0 Then Return New String() {}
-        Dim n As Integer = _cam.IsoValues.Count
+        If _cam Is Nothing OrElse _cam.IsoNumbers.Count = 0 Then Return New String() {}
+        Dim n As Integer = _cam.IsoNumbers.Count
         Dim a(n - 1) As String
         For i As Integer = 0 To n - 1
-            a(i) = "ISO " & (i + 1)
+            a(i) = _cam.IsoNumbers(i).ToString()
         Next
         Return a
     End Function

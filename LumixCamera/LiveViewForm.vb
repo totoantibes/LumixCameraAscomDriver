@@ -62,7 +62,7 @@ Public Class LiveViewForm
         AddHandler _tmr.Tick, AddressOf OnTick
         _tmr.Start()
 
-        AddHandler Me.FormClosing, AddressOf OnClosing
+        AddHandler Me.FormClosing, AddressOf HandleFormClosing
     End Sub
 
     Private Sub OnTick(sender As Object, e As EventArgs)
@@ -87,7 +87,8 @@ Public Class LiveViewForm
         End Try
     End Sub
 
-    Private Sub OnClosing(sender As Object, e As FormClosingEventArgs)
+    ' Not named OnClosing: that shadows Form.OnClosing (BC40005).
+    Private Sub HandleFormClosing(sender As Object, e As FormClosingEventArgs)
         Try : _tmr.Stop() : Catch : End Try
         Try : UsbTransport.StopLiveView() : Catch : End Try
         If _ownsConnection Then Try : UsbTransport.Disconnect() : Catch : End Try

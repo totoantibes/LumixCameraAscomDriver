@@ -1036,6 +1036,11 @@ Public Class Camera
     Public ReadOnly Property Gains() As ArrayList Implements ICameraV2.Gains
         Get
             TL.LogMessage("Gains Get", "returning the list of ISO values")
+            If My.Settings.ConnectionMode.StartsWith("USB") AndAlso UsbTransport.IsConnected Then
+                ' Gain is an index, so the advertised list must be the same one SetIsoIndex
+                ' indexes into — the camera's own ISO capability list, not the WiFi table.
+                Return New ArrayList(UsbTransport.IsoDisplay())
+            End If
             Return ISOTableAL
             'Throw New ASCOM.PropertyNotImplementedException("Gains", False)
         End Get
@@ -1335,6 +1340,12 @@ Public Class Camera
         End Get
         Set(value As Short)
             TL.LogMessage("ReadoutMode Set", ROM(value).ToString)
+            If My.Settings.ConnectionMode.StartsWith("USB") Then
+                ' No cam.cgi over USB (there is no camera IP). Extended already forces RAW on
+                ' connect; Standard uses whatever quality the body is set to.
+                CurrentROM = value
+                Return
+            End If
             SendLumixMessage(QUALITY + "raw_fine")
             'Select Case value
             '    Case 0, 2
@@ -1513,7 +1524,8 @@ Public Class Camera
             pixelSize = p                     ' PixelSizeX/Y in microns
             sensormmx = p * w / 1000.0        ' keep sensor-mm consistent with pitch
             sensormmy = p * h / 1000.0
-            ReadoutMode = 1 : CurrentROM = 1  ' USB delivers RW2 (RAW)
+            CurrentROM = 1                    ' USB delivers RW2 (RAW); set the field, not the
+            '                                   property — its setter is the WiFi cam.cgi path.
             connectedState = True
             TL.LogMessage("Connected Set", "USB connected: " & MODEL & " (" & w & "x" & h & ")")
         Catch ex As Exception
