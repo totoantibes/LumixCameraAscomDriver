@@ -78,8 +78,18 @@ Public Class LiveViewForm
             _cbSize.Items.AddRange(WifiLiveView.Sizes)
             Dim current As String = WifiLiveView.GetSize()
             _cbSize.SelectedIndex = Math.Max(0, _cbSize.FindStringExact(current))
+            ' Restart the stream around the change: the camera accepts a size change
+            ' while streaming but goes on sending the old size until it restarts.
             AddHandler _cbSize.SelectedIndexChanged,
-                Sub(s, e) WifiLiveView.SetSize(_cbSize.SelectedItem.ToString())
+                Sub(s, e)
+                    If _wifiLv Is Nothing Then Return
+                    _busy = True
+                    Try
+                        _wifiLv.ChangeSize(_cbSize.SelectedItem.ToString())
+                    Finally
+                        _busy = False
+                    End Try
+                End Sub
             Me.Controls.Add(_cbSize)
 
             _wifiLv = New WifiLiveView()

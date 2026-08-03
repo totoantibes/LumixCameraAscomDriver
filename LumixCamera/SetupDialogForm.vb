@@ -79,7 +79,20 @@ Public Class SetupDialogForm
             .Size = New Drawing.Size(190, 24)}
         CBConnectionMode.Items.AddRange(New Object() {ModeDisplay("WiFi"), ModeDisplay("USB"), ModeDisplay("USBExtended")})
         Me.Controls.Add(CBConnectionMode)
-        lblModeStatus = New Label With {.Location = New Drawing.Point(300, 12), .AutoSize = True, .ForeColor = Drawing.Color.DimGray}
+
+        ' Create the button FIRST so the status label can be sized to the gap that is
+        ' left. As an AutoSize label it grew under the button and hid it completely.
+        btnLiveView = New Button With {
+            .Text = "Live View…", .Location = New Drawing.Point(Me.ClientSize.Width - 110, 8),
+            .Size = New Drawing.Size(100, 26), .Anchor = AnchorStyles.Top Or AnchorStyles.Right}
+        AddHandler btnLiveView.Click, AddressOf OpenLiveView
+        Me.Controls.Add(btnLiveView)
+        btnLiveView.BringToFront()
+
+        lblModeStatus = New Label With {
+            .Location = New Drawing.Point(300, 12), .AutoSize = False,
+            .Size = New Drawing.Size(Math.Max(60, btnLiveView.Left - 308), 20),
+            .AutoEllipsis = True, .ForeColor = Drawing.Color.DimGray}
         Me.Controls.Add(lblModeStatus)
 
         Dim usbPresent As Boolean = UsbTransport.IsUsbCameraPresent()
@@ -106,16 +119,24 @@ Public Class SetupDialogForm
         End If
         CBConnectionMode.SelectedItem = ModeDisplay(preselect)
 
-        ' Live View button (USB modes only).
-        btnLiveView = New Button With {
-            .Text = "Live View…", .Location = New Drawing.Point(Me.ClientSize.Width - 110, 8),
-            .Size = New Drawing.Size(100, 26), .Anchor = AnchorStyles.Top Or AnchorStyles.Right}
-        AddHandler btnLiveView.Click, AddressOf OpenLiveView
-        Me.Controls.Add(btnLiveView)
         ' Live view works on both transports: the USB SDK hands over frames directly,
         ' and WiFi streams MJPEG over UDP once the camera has been told where to send it.
+        ' Re-check on a mode change AND on an IP change - in WiFi the IP only appears
+        ' once InitUI has run, which is after this constructor.
+        RefreshLiveViewButton()
+        AddHandler CBConnectionMode.SelectedIndexChanged, Sub(s, e) RefreshLiveViewButton()
+        AddHandler CBCameraIPAddress.SelectedIndexChanged, Sub(s, e) RefreshLiveViewButton()
+    End Sub
+
+    ''' <summary>
+    ''' Enable/disable the Live View button for the current mode and IP. Called from the
+    ''' constructor, from Load (after discovery has found an IP) and on any mode or IP
+    ''' change - evaluating it only in the constructor left the button disabled in WiFi
+    ''' until the user toggled the mode away and back.
+    ''' </summary>
+    Private Sub RefreshLiveViewButton()
+        If btnLiveView Is Nothing Then Return
         btnLiveView.Enabled = LiveViewAvailable()
-        AddHandler CBConnectionMode.SelectedIndexChanged, Sub(s, e) btnLiveView.Enabled = LiveViewAvailable()
     End Sub
 
     ''' <summary>
@@ -270,6 +291,9 @@ Public Class SetupDialogForm
         ' Retrieve current values of user settings from the ASCOM Profile.
         ' Only run the WiFi LAN discovery in WiFi mode (it is a slow, pointless scan over USB).
         If SelectedMode = "WiFi" Then InitUI()
+        ' Discovery has now had its chance to find a camera IP, so re-evaluate the Live
+        ' View button: at construction time there was no IP yet and it stayed disabled.
+        RefreshLiveViewButton()
         ' Set default value for CBShutterSpeed
         If CBShutterSpeed.Items.Count > 0 Then
 

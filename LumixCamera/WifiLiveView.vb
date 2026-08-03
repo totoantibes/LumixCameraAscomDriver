@@ -28,13 +28,29 @@ Public Class WifiLiveView
     Private Const LIVEVIEWSIZE As String = "cam.cgi?mode=setsetting&type=liveviewsize&value="
 
     ''' <summary>
-    ''' Ask the camera for a stream size. Safe to call while streaming - the camera
-    ''' switches on the fly. Returns False if it refuses.
+    ''' Ask the camera for a stream size. NOTE the camera answers ok but keeps sending
+    ''' the old size if it is already streaming - measured on a GH5S, frame sizes were
+    ''' unchanged across a mid-stream switch. Use <see cref="ChangeSize"/> while running.
     ''' </summary>
     Public Shared Function SetSize(size As String) As Boolean
         If String.IsNullOrEmpty(size) Then Return False
         Dim reply As String = Camera.SendLumixMessage(LIVEVIEWSIZE & size)
         Return reply IsNot Nothing AndAlso reply.Contains("ok")
+    End Function
+
+    ''' <summary>
+    ''' Switch stream size, restarting the stream so the camera actually applies it.
+    ''' Setting it alone is accepted but ignored until the stream restarts.
+    ''' </summary>
+    Public Function ChangeSize(size As String) As Boolean
+        Dim wasRunning As Boolean = _running
+        If wasRunning Then [Stop]()
+        If Not SetSize(size) Then
+            If wasRunning Then Start(_port)
+            Return False
+        End If
+        If wasRunning Then Return Start(_port)
+        Return True
     End Function
 
     ''' <summary>The size the camera currently reports, or "" if it cannot be read.</summary>
