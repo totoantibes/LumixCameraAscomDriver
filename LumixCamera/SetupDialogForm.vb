@@ -107,10 +107,17 @@ Public Class SetupDialogForm
         AddHandler btnLiveView.Click, AddressOf OpenLiveView
         Me.Controls.Add(btnLiveView)
 
-        Dim usbPresent As Boolean = UsbTransport.IsUsbCameraPresent()
+        Dim usbModel As String = UsbTransport.UsbCameraModel()
+        Dim usbPresent As Boolean = Not String.IsNullOrEmpty(usbModel)
         Dim tetherPresent As Boolean = UsbTransport.IsTetherInstalled()
         lblModeStatus.Text = String.Format("USB cam: {0}   Tether: {1}",
-            If(usbPresent, "detected", "none"), If(tetherPresent, "found", "not found"))
+            If(usbPresent, usbModel, "none"), If(tetherPresent, "found", "not found"))
+
+        ' Show the model straight away when a camera is cabled. Only the WiFi discovery
+        ' used to fill this in, so over USB it stayed "No Model found yet" until the
+        ' client connected. If WiFi discovery runs later it overwrites this with the
+        ' model the camera reports over the network, which is what we want in that mode.
+        If usbPresent Then Label8.Text = usbModel
 
         ' Retain the saved choice when the hardware still supports it; otherwise fall
         ' back to what is actually available now.

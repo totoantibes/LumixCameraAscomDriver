@@ -86,6 +86,26 @@ Public Class UsbTransport
         Return False
     End Function
 
+    ''' <summary>
+    ''' Model name of the cabled camera ("DC-GH5S"), or "" if none. Read from WMI rather
+    ''' than the SDK on purpose: the setup dialog needs the model before anything is
+    ''' connected, and loading/initialising Lmxptpif here would pin the process to one
+    ''' DLL and ABI before the user has chosen Standard or Extended.
+    ''' </summary>
+    Public Shared Function UsbCameraModel() As String
+        Try
+            Using searcher As New System.Management.ManagementObjectSearcher(
+                "SELECT Name FROM Win32_PnPEntity WHERE DeviceID LIKE '%VID_04DA%'")
+                For Each mo As System.Management.ManagementObject In searcher.Get()
+                    Dim n As Object = mo("Name")
+                    If n IsNot Nothing AndAlso Not String.IsNullOrEmpty(n.ToString()) Then Return n.ToString()
+                Next
+            End Using
+        Catch
+        End Try
+        Return ""
+    End Function
+
     ''' <summary>End any capture in progress (ASCOM AbortExposure/StopExposure).</summary>
     Public Shared Sub AbortCapture()
         If _cam IsNot Nothing Then
