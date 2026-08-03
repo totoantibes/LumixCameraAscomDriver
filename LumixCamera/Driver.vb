@@ -527,9 +527,24 @@ Public Class Camera
                     ConnectUsb()
                     Return
                 End If
-                TL.LogMessage("Connected Set", "Connecting to IP Address " + IPAddress)
-                ' TODO connect to the device
+                ' Read the target first, then log it - logging before the assignment
+                ' reported whatever the previous session left behind, which is what made
+                ' a connect-to-nothing look like a normal connect in the trace.
                 IPAddress = My.Settings.IPAddress
+                TL.LogMessage("Connected Set", "Connecting to IP Address " + IPAddress)
+
+                ' A profile that has never been through the setup dialog - a fresh install,
+                ' or one reset by a COM re-registration - leaves IPAddress empty. Connecting
+                ' anyway returned success and left the client holding a camera with nothing
+                ' behind it: every later cam.cgi failed silently and the first exposure was
+                ' the first symptom. Refuse here, and say what to do about it.
+                If String.IsNullOrWhiteSpace(IPAddress) OrElse IPAddress = IPAddressDefault Then
+                    connectedState = False
+                    TL.LogMessage("Connected Set", "no camera IP configured - refusing to connect")
+                    Throw New ASCOM.DriverException(
+                        "No camera IP address is configured. Open the driver's Setup dialog, " &
+                        "let it find the camera on the network (or switch to USB), and press OK.")
+                End If
                 TempPath = NormalisePath(My.Settings.TempPath)
                 CurrentSpeed = My.Settings.Speed
                 ' Resolve and clamp BEFORE assigning: TransferFormat can be unset or stale,
