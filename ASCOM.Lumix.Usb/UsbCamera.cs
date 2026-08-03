@@ -23,6 +23,18 @@ namespace ASCOM.Lumix.Usb
     public sealed class UsbCamera : IDisposable
     {
         private readonly NativeMethods.LMX_CALLBACK_FUNC _callback;
+
+        /// <summary>
+        /// Every callback delegate ever handed to the SDK, kept for the life of the
+        /// process. The SDK stores a raw function pointer; once the owning UsbCamera is
+        /// collected (Disconnect drops the reference) that pointer dangles, and any
+        /// late callback - including one during process shutdown - faults natively.
+        /// ConformU exposed this: the whole run passed, then the process died with
+        /// 0xC0000005 on exit. The DLL is never unloaded either, so holding these
+        /// costs a few bytes and removes the whole failure mode.
+        /// </summary>
+        private static readonly List<NativeMethods.LMX_CALLBACK_FUNC> _liveCallbacks =
+            new List<NativeMethods.LMX_CALLBACK_FUNC>();
         private IntPtr _devInfoBuf = IntPtr.Zero;
         private bool _connected;
 
@@ -91,6 +103,8 @@ namespace ASCOM.Lumix.Usb
                     { cam.FreeBuf(); throw new InvalidOperationException($"Open_Session failed (err 0x{err:X8})."); }
             }
 
+            // Root the delegate before the SDK takes its address - see _liveCallbacks.
+            lock (_liveCallbacks) _liveCallbacks.Add(cam._callback);
             NativeMethods.LMX_func_api_Reg_NotifyCallback(NativeMethods.EV_OBJCT_ADD, cam._callback);
             NativeMethods.LMX_func_api_Reg_NotifyCallback(NativeMethods.EV_OBJCT_REQ_TRNSFER, cam._callback);
             NativeMethods.LMX_func_api_Reg_NotifyCallback(NativeMethods.EV_REC_CTRL_RELEASE, cam._callback);
