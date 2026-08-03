@@ -1,4 +1,4 @@
-Imports System.Net
+﻿Imports System.Net
 Imports System.Net.Sockets
 Imports System.Threading
 
@@ -32,9 +32,9 @@ Public Class WifiLiveView
     ''' the old size if it is already streaming - measured on a GH5S, frame sizes were
     ''' unchanged across a mid-stream switch. Use <see cref="ChangeSize"/> while running.
     ''' </summary>
-    Public Shared Function SetSize(size As String) As Boolean
+    Public Function SetSize(size As String) As Boolean
         If String.IsNullOrEmpty(size) Then Return False
-        Dim reply As String = Camera.SendLumixMessage(LIVEVIEWSIZE & size)
+        Dim reply As String = _cam.SendLumixMessage(LIVEVIEWSIZE & size)
         Return reply IsNot Nothing AndAlso reply.Contains("ok")
     End Function
 
@@ -54,8 +54,8 @@ Public Class WifiLiveView
     End Function
 
     ''' <summary>The size the camera currently reports, or "" if it cannot be read.</summary>
-    Public Shared Function GetSize() As String
-        Dim reply As String = Camera.SendLumixMessage("cam.cgi?mode=getsetting&type=liveviewsize")
+    Public Function GetSize() As String
+        Dim reply As String = _cam.SendLumixMessage("cam.cgi?mode=getsetting&type=liveviewsize")
         If reply Is Nothing Then Return ""
         Dim marker As String = "liveviewsize="""
         Dim i As Integer = reply.IndexOf(marker, StringComparison.Ordinal)
@@ -65,6 +65,15 @@ Public Class WifiLiveView
         If j < 0 Then Return ""
         Return reply.Substring(i, j - i)
     End Function
+
+    ' Hold the driver instance rather than reaching for Shared members: #27 makes
+    ' IPAddress / SendLumixMessage per-instance, and this keeps the two branches
+    ' mergeable. (On this branch they are still Shared, hence BC42025.)
+    Private ReadOnly _cam As Camera
+
+    Public Sub New(cameraInstance As Camera)
+        _cam = cameraInstance
+    End Sub
 
     Private _udp As UdpClient
     Private _receiver As Thread
@@ -93,7 +102,7 @@ Public Class WifiLiveView
     ''' </summary>
     Public Function Start(Optional port As Integer = DefaultPort) As Boolean
         If _running Then Return True
-        If String.IsNullOrEmpty(Camera.IPAddress) Then Return False
+        If String.IsNullOrEmpty(_cam.IPAddress) Then Return False
 
         _port = port
         Try
@@ -112,8 +121,8 @@ Public Class WifiLiveView
 
         ' Live view only streams from rec mode; a preceding capture leaves the camera
         ' in playmode.
-        Camera.SendLumixMessage("cam.cgi?mode=camcmd&value=recmode")
-        Dim reply As String = Camera.SendLumixMessage("cam.cgi?mode=startstream&value=" & _port.ToString())
+        _cam.SendLumixMessage("cam.cgi?mode=camcmd&value=recmode")
+        Dim reply As String = _cam.SendLumixMessage("cam.cgi?mode=startstream&value=" & _port.ToString())
         If reply Is Nothing OrElse Not reply.Contains("ok") Then
             CloseSocket()
             Return False
@@ -130,7 +139,7 @@ Public Class WifiLiveView
         If Not _running Then Return
         _running = False
         Try
-            Camera.SendLumixMessage("cam.cgi?mode=stopstream")
+            _cam.SendLumixMessage("cam.cgi?mode=stopstream")
         Catch
         End Try
         Try

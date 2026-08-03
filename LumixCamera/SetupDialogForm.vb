@@ -1,4 +1,4 @@
-Imports System.IO
+﻿Imports System.IO
 Imports System.Net
 Imports System.Data
 Imports System.Net.NetworkInformation
@@ -42,10 +42,15 @@ Public Class SetupDialogForm
     ''' </summary>
     Const ERROR_INSUFFICIENT_BUFFER As Integer = 122
 
-    Public Sub New()
+    ' The Camera driver instance this dialog configures. Held rather than reaching for
+    ' Shared members so this branch merges cleanly with the instance-state refactor.
+    Private ReadOnly cam As Camera
+
+    Public Sub New(cameraInstance As Camera)
 
         ' This call is required by the designer.
         InitializeComponent()
+        cam = cameraInstance
 
         ' Add any initialization after the InitializeComponent() call.
         CBResolution.DataSource = New BindingSource(Camera.ResolutionTable, Nothing)
@@ -152,12 +157,12 @@ Public Class SetupDialogForm
     ''' </summary>
     Private Function LiveViewAvailable() As Boolean
         If SelectedMode.StartsWith("USB") Then Return True
-        Return Not String.IsNullOrEmpty(Camera.IPAddress) AndAlso Camera.IPAddress <> Camera.IPAddressDefault
+        Return Not String.IsNullOrEmpty(cam.IPAddress) AndAlso cam.IPAddress <> Camera.IPAddressDefault
     End Function
 
     Private Sub OpenLiveView(sender As Object, e As EventArgs)
         If Not LiveViewAvailable() Then Return
-        Using f As New LiveViewForm(SelectedMode = "USBExtended", Not SelectedMode.StartsWith("USB"))
+        Using f As New LiveViewForm(SelectedMode = "USBExtended", Not SelectedMode.StartsWith("USB"), cam)
             f.ShowDialog(Me)
         End Using
     End Sub

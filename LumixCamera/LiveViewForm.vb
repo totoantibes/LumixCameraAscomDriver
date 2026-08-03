@@ -1,4 +1,4 @@
-Imports System.Drawing
+﻿Imports System.Drawing
 Imports System.IO
 Imports System.Windows.Forms
 
@@ -20,6 +20,7 @@ Public Class LiveViewForm
     Private ReadOnly _wifi As Boolean
     Private _wifiLv As WifiLiveView
     Private _cbSize As ComboBox
+    Private ReadOnly _cam As Camera
     Private _lblInfo As Label
     Private _framesSeen As Integer
     Private _lastInfo As DateTime = DateTime.MinValue
@@ -29,8 +30,9 @@ Public Class LiveViewForm
     ''' <paramref name="extended"/> selects the Tether ABI on USB. <paramref name="wifi"/>
     ''' switches the whole form to the WiFi transport (UDP MJPEG) instead of the USB SDK.
     ''' </summary>
-    Public Sub New(extended As Boolean, Optional wifi As Boolean = False)
+    Public Sub New(extended As Boolean, Optional wifi As Boolean = False, Optional cameraInstance As Camera = Nothing)
         _wifi = wifi
+        _cam = cameraInstance
         Me.Text = "Lumix Live View"
         Me.ClientSize = New Size(700, 560)
         Me.StartPosition = FormStartPosition.CenterParent
@@ -65,7 +67,7 @@ Public Class LiveViewForm
         If _wifi Then
             ' WiFi: the camera streams MJPEG over UDP; no session to open, but it does
             ' need an IP, which only exists once the setup dialog has one selected.
-            If String.IsNullOrEmpty(Camera.IPAddress) Then
+            If String.IsNullOrEmpty(_cam.IPAddress) Then
                 MessageBox.Show("No camera IP address selected yet.", "Live View")
             End If
             For i As Integer = 0 To Camera.ShutterTable.GetLength(0) - 1
@@ -76,9 +78,9 @@ Public Class LiveViewForm
                 If Integer.TryParse(isoValue, numericIso) Then _cbIso.Items.Add(isoValue)
             Next
             AddHandler _cbShutter.SelectedIndexChanged,
-                Sub(s, e) Camera.SendLumixMessage(Camera.SHUTTERSPEED & Camera.ShutterTable(_cbShutter.SelectedIndex, 0))
+                Sub(s, e) _cam.SendLumixMessage(Camera.SHUTTERSPEED & Camera.ShutterTable(_cbShutter.SelectedIndex, 0))
             AddHandler _cbIso.SelectedIndexChanged,
-                Sub(s, e) Camera.SendLumixMessage(Camera.ISO & _cbIso.SelectedItem.ToString())
+                Sub(s, e) _cam.SendLumixMessage(Camera.ISO & _cbIso.SelectedItem.ToString())
 
             ' Stream-size selector: the camera offers VGA and QVGA, switchable while
             ' streaming. QVGA halves the bandwidth on a weak link.
@@ -88,7 +90,8 @@ Public Class LiveViewForm
                                          .DropDownStyle = ComboBoxStyle.DropDownList,
                                          .Anchor = AnchorStyles.Bottom Or AnchorStyles.Left}
             _cbSize.Items.AddRange(WifiLiveView.Sizes)
-            Dim current As String = WifiLiveView.GetSize()
+            Dim probe As New WifiLiveView(_cam)
+            Dim current As String = probe.GetSize()
             _cbSize.SelectedIndex = Math.Max(0, _cbSize.FindStringExact(current))
             ' Restart the stream around the change: the camera accepts a size change
             ' while streaming but goes on sending the old size until it restarts.
@@ -104,7 +107,7 @@ Public Class LiveViewForm
                 End Sub
             Me.Controls.Add(_cbSize)
 
-            _wifiLv = New WifiLiveView()
+            _wifiLv = New WifiLiveView(_cam)
             If Not _wifiLv.Start() Then
                 MessageBox.Show("The camera did not start the live-view stream." & vbCrLf &
                                 "If Windows asks to allow inbound network access, accept it - the " &

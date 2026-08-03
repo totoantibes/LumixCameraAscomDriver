@@ -1,4 +1,4 @@
-' --------------------------------------------------------------------------------
+﻿' --------------------------------------------------------------------------------
 ' ASCOM Camera driver for Lumix
 
 'This driver provides an interface to the Lumix http over wifi remote control protocol
@@ -558,7 +558,7 @@ Public Class Camera
         '    System.Windows.Forms.MessageBox.Show("Already connected, just press OK")
         'End If
 
-        Using F As SetupDialogForm = New SetupDialogForm()
+        Using F As SetupDialogForm = New SetupDialogForm(Me)
             Dim result As System.Windows.Forms.DialogResult = F.ShowDialog()
             If result = DialogResult.OK Then
                 My.Settings.Save()
