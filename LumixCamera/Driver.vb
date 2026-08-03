@@ -1679,10 +1679,16 @@ Public Class Camera
             Loop While (tries > 0 And temp.Contains("err"))
 
             PictureString = GetPix(1)
-            If PictureString IsNot "" Then
+            ' Value comparison, not reference: 'IsNot ""' compares references and is
+            ' therefore always True, so GetPix's documented "" failure return sailed
+            ' through the guard into XElement.Parse("") and surfaced as
+            ' "XmlException: Root element is missing" instead of the DriverException
+            ' intended here. (Same reference-vs-value mistake fixed in the setup dialog.)
+            If Not String.IsNullOrEmpty(PictureString) Then
                 XPictures = XElement.Parse(PictureString)
             Else
-                Throw New ASCOM.DriverException
+                TL.LogMessage("ReadImageFromCamera", "the camera returned an empty content-browse response")
+                Throw New ASCOM.DriverException("The camera returned an empty image-list response")
             End If
 
             Dim items As IEnumerable(Of XElement) =
