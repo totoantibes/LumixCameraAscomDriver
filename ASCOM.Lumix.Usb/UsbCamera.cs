@@ -106,6 +106,17 @@ namespace ASCOM.Lumix.Usb
             return Marshal.PtrToStringUni(p) ?? string.Empty;
         }
 
+        /// <summary>
+        /// Switch the body between RAW and JPEG (Extended only - the public SDK exports
+        /// no ImageInfo_* calls, so in Standard the body keeps whatever it is set to).
+        /// </summary>
+        public bool SetImageQuality(bool raw)
+        {
+            if (!NativeMethods.Extended) return false;
+            uint e;
+            return NativeMethods.SetImageQuality(raw, out e) != 0;
+        }
+
         public bool SetIso(uint rawIso) { uint e; return NativeMethods.ISO_Set_Param(rawIso, out e) != 0; }
         public bool SetShutter(long rawSs) { uint e; return NativeMethods.SS_Set_Param(rawSs, out e) != 0; }
         public bool SetShutterByIndex(int i) { return i >= 0 && i < _ssRaw.Count && SetShutter(_ssRaw[i]); }

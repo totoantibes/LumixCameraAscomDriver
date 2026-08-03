@@ -144,6 +144,17 @@ namespace ASCOM.Lumix.Usb
         internal static byte Close_Device(out uint e) => Extended ? Ext_CloseDevice(Ctx, out e) : Pub_Close_Device(out e);
 
         /// <summary>Extended-only: switch the body to RAW (refresh the range first, like BULB).</summary>
+        /// <summary>Extended-only: switch the body between RAW and JPEG (fine).</summary>
+        internal static byte SetImageQuality(bool raw, out uint e)
+        {
+            EnsureTetherBuffers();
+            uint ignore;
+            // Same refresh-then-set dance as BULB: the settable range has to be read
+            // before the new value sticks.
+            Ext_ImageInfo_GetCapability(CapBuf, Ctx, out ignore);
+            return Ext_ImageInfo_SetImageQuality(raw ? IMGQ_RAW : IMGQ_JPEG_FINE, Ctx, out e);
+        }
+
         internal static byte SetImageQualityRaw(out uint e)
         {
             EnsureTetherBuffers();

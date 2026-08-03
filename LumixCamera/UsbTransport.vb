@@ -106,6 +106,19 @@ Public Class UsbTransport
         Return ""
     End Function
 
+    ''' <summary>
+    ''' Switch the body between RAW and JPEG. Extended only - the public SDK exports no
+    ''' image-quality calls, so in Standard the body keeps whatever it is set to.
+    ''' </summary>
+    Public Shared Function SetImageQuality(raw As Boolean) As Boolean
+        If _cam Is Nothing Then Return False
+        Try
+            Return _cam.SetImageQuality(raw)
+        Catch
+            Return False
+        End Try
+    End Function
+
     ''' <summary>End any capture in progress (ASCOM AbortExposure/StopExposure).</summary>
     Public Shared Sub AbortCapture()
         If _cam IsNot Nothing Then

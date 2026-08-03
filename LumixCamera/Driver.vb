@@ -182,6 +182,9 @@ Public Class Camera
     Public ROM = {"JPG", "RAW", "Thumb"}
     Private JPEGPixelOffset As Int16 = 20
     Public ROMAL As New ArrayList
+    ' RAW first so the default index 0 is the mode that always works over USB.
+    Public ROMALUsbStandard As New ArrayList(New String() {"RAW"})
+    Public ROMALUsbExtended As New ArrayList(New String() {"RAW", "JPG"})
     Public ISOTableAL As New ArrayList
     Public Shared Models As New Hashtable
     Public Shared CurrentROM As UShort
@@ -1157,7 +1160,7 @@ Public Class Camera
             bytesPerPixel = bitmapSource.Format.BitsPerPixel / 8
             stride = bitmapSource.PixelWidth * bytesPerPixel
 
-            If CurrentROM = 1 Then  'RAW
+            If ReadoutIsRaw() Then  'RAW
                 Dim pixels(bitmapSource.PixelHeight * stride * 2) As Byte
                 bitmapSource.CopyPixels(pixels, stride, 0)
                 For y = 0 To (cameraNumY - 2)
@@ -1334,15 +1337,27 @@ Public Class Camera
 
     Public Property ReadoutMode() As Short Implements ICameraV2.ReadoutMode
         Get
-            TL.LogMessage("ReadoutMode Get", ROM(CurrentROM))
+            TL.LogMessage("ReadoutMode Get", ReadoutModeName())
             Return CurrentROM
             'Throw New ASCOM.PropertyNotImplementedException("ReadoutMode", False)
         End Get
         Set(value As Short)
-            TL.LogMessage("ReadoutMode Set", ROM(value).ToString)
+            ' Validate against the modes this transport actually offers - the list is
+            ' shorter over USB. An out-of-range value used to index ROM() and escape as a
+            ' raw IndexOutOfRangeException where ASCOM requires InvalidValueException.
+            Dim modes As ArrayList = ActiveReadoutModes()
+            If value < 0 OrElse value >= modes.Count Then
+                TL.LogMessage("ReadoutMode Set", "rejected out-of-range value " & value.ToString())
+                Throw New ASCOM.InvalidValueException("ReadoutMode", value.ToString(), "0.." & (modes.Count - 1).ToString())
+            End If
+            TL.LogMessage("ReadoutMode Set", CStr(modes(value)))
             If My.Settings.ConnectionMode.StartsWith("USB") Then
-                ' No cam.cgi over USB (there is no camera IP). Extended already forces RAW on
-                ' connect; Standard uses whatever quality the body is set to.
+                ' No cam.cgi over USB. Extended can genuinely switch the body between RAW
+                ' and JPEG; Standard cannot (the public SDK exports no ImageInfo_* calls),
+                ' so its list is RAW-only and there is nothing to send.
+                If My.Settings.ConnectionMode = "USBExtended" Then
+                    UsbTransport.SetImageQuality(CStr(modes(value)) = "RAW")
+                End If
                 CurrentROM = value
                 Return
             End If
@@ -1360,11 +1375,37 @@ Public Class Camera
 
     Public ReadOnly Property ReadoutModes() As ArrayList Implements ICameraV2.ReadoutModes
         Get
-            TL.LogMessage("ReadoutModes Get", "JPG, RAW or Thumb")
-            Return ROMAL
+            Dim modes As ArrayList = ActiveReadoutModes()
+            TL.LogMessage("ReadoutModes Get", String.Join(", ", modes.ToArray()))
+            Return modes
             'Throw New ASCOM.PropertyNotImplementedException("ReadoutModes", False)
         End Get
     End Property
+
+    ''' <summary>
+    ''' The readout modes this transport can actually deliver. WiFi fetches JPG, RAW or a
+    ''' thumbnail over DLNA. USB does not: the capture path takes whatever the body
+    ''' produces, there is no thumbnail call at all, and only the Tether ABI can change
+    ''' the image quality (ImageInfo_Set_ImageQuality) - the public SDK exports nothing
+    ''' for it. Advertising all three over USB offered choices that silently did nothing.
+    ''' </summary>
+    Private Function ActiveReadoutModes() As ArrayList
+        If My.Settings.ConnectionMode = "USBExtended" Then Return ROMALUsbExtended
+        If My.Settings.ConnectionMode = "USB" Then Return ROMALUsbStandard
+        Return ROMAL
+    End Function
+
+    ''' <summary>Name of the selected readout mode, or "RAW" if the index is unusable.</summary>
+    Private Function ReadoutModeName() As String
+        Dim modes As ArrayList = ActiveReadoutModes()
+        If CurrentROM >= 0 AndAlso CurrentROM < modes.Count Then Return CStr(modes(CurrentROM))
+        Return "RAW"
+    End Function
+
+    ''' <summary>True when the selected readout mode is RAW (was 'CurrentROM = 1').</summary>
+    Private Function ReadoutIsRaw() As Boolean
+        Return ReadoutModeName() = "RAW"
+    End Function
 
     Public ReadOnly Property SensorName() As String Implements ICameraV2.SensorName
         Get
@@ -1524,8 +1565,9 @@ Public Class Camera
             pixelSize = p                     ' PixelSizeX/Y in microns
             sensormmx = p * w / 1000.0        ' keep sensor-mm consistent with pitch
             sensormmy = p * h / 1000.0
-            CurrentROM = 1                    ' USB delivers RW2 (RAW); set the field, not the
-            '                                   property — its setter is the WiFi cam.cgi path.
+            CurrentROM = 0                    ' RAW is index 0 in the USB mode lists; set the
+            '                                   field, not the property, whose WiFi branch
+            '                                   posts cam.cgi.
             connectedState = True
             TL.LogMessage("Connected Set", "USB connected: " & MODEL & " (" & w & "x" & h & ")")
         Catch ex As Exception
