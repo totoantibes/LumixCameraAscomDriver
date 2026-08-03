@@ -1302,11 +1302,20 @@ Public Class Camera
 
     Public Property ReadoutMode() As Short Implements ICameraV2.ReadoutMode
         Get
+            If CurrentROM >= ROM.Length Then Return 0 ' never index ROM() out of range
             TL.LogMessage("ReadoutMode Get", ROM(CurrentROM))
             Return CurrentROM
             'Throw New ASCOM.PropertyNotImplementedException("ReadoutMode", False)
         End Get
         Set(value As Short)
+            ' ReadoutMode is an index into ReadoutModes. Validate before using it to
+            ' index ROM(): an out-of-range value used to raise a raw
+            ' IndexOutOfRangeException out of the logging line, where ASCOM requires
+            ' InvalidValueException (and any conformance checker sets one deliberately).
+            If value < 0 OrElse value >= ROM.Length Then
+                TL.LogMessage("ReadoutMode Set", "rejected out-of-range value " & value.ToString())
+                Throw New ASCOM.InvalidValueException("ReadoutMode", value.ToString(), "0.." & (ROM.Length - 1).ToString())
+            End If
             TL.LogMessage("ReadoutMode Set", ROM(value).ToString)
             SendLumixMessage(QUALITY + "raw_fine")
             'Select Case value
