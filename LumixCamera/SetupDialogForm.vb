@@ -66,32 +66,36 @@ Public Class SetupDialogForm
     ''' sensible default; the chosen value is persisted (My.Settings.ConnectionMode).
     ''' </summary>
     Private Sub BuildModeSelector()
-        Const shift As Integer = 46
+        ' Two rows: the mode combo and the Live View button share the first, the status
+        ' text gets the second. The form is only ~370px wide, so a single row put the
+        ' button on top of the combo and pushed the status label off the edge.
+        Const shift As Integer = 72
         Me.ClientSize = New Drawing.Size(Me.ClientSize.Width, Me.ClientSize.Height + shift)
         For Each c As Control In Me.Controls
             c.Top += shift
         Next
 
+        Dim rightEdge As Integer = Me.ClientSize.Width - 10
+        Dim btnWidth As Integer = 96
+
         Me.Controls.Add(New Label With {.Text = "Connection:", .Location = New Drawing.Point(12, 12), .AutoSize = True})
         CBConnectionMode = New ComboBox With {
             .DropDownStyle = ComboBoxStyle.DropDownList,
             .Location = New Drawing.Point(100, 8),
-            .Size = New Drawing.Size(190, 24)}
+            .Size = New Drawing.Size(Math.Max(120, rightEdge - btnWidth - 108), 24)}
         CBConnectionMode.Items.AddRange(New Object() {ModeDisplay("WiFi"), ModeDisplay("USB"), ModeDisplay("USBExtended")})
         Me.Controls.Add(CBConnectionMode)
 
-        ' Create the button FIRST so the status label can be sized to the gap that is
-        ' left. As an AutoSize label it grew under the button and hid it completely.
         btnLiveView = New Button With {
-            .Text = "Live View…", .Location = New Drawing.Point(Me.ClientSize.Width - 110, 8),
-            .Size = New Drawing.Size(100, 26), .Anchor = AnchorStyles.Top Or AnchorStyles.Right}
+            .Text = "Live View…", .Location = New Drawing.Point(rightEdge - btnWidth, 8),
+            .Size = New Drawing.Size(btnWidth, 26), .Anchor = AnchorStyles.Top Or AnchorStyles.Right}
         AddHandler btnLiveView.Click, AddressOf OpenLiveView
         Me.Controls.Add(btnLiveView)
-        btnLiveView.BringToFront()
 
+        ' Second row - full width, so it can say whatever it needs to.
         lblModeStatus = New Label With {
-            .Location = New Drawing.Point(300, 12), .AutoSize = False,
-            .Size = New Drawing.Size(Math.Max(60, btnLiveView.Left - 308), 20),
+            .Location = New Drawing.Point(12, 42), .AutoSize = False,
+            .Size = New Drawing.Size(rightEdge - 12, 18),
             .AutoEllipsis = True, .ForeColor = Drawing.Color.DimGray}
         Me.Controls.Add(lblModeStatus)
 

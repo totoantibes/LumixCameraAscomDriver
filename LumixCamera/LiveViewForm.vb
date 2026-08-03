@@ -20,6 +20,10 @@ Public Class LiveViewForm
     Private ReadOnly _wifi As Boolean
     Private _wifiLv As WifiLiveView
     Private _cbSize As ComboBox
+    Private _lblInfo As Label
+    Private _framesSeen As Integer
+    Private _lastInfo As DateTime = DateTime.MinValue
+    Private _lastCount As Integer
 
     ''' <summary>
     ''' <paramref name="extended"/> selects the Tether ABI on USB. <paramref name="wifi"/>
@@ -45,6 +49,14 @@ Public Class LiveViewForm
         Me.Controls.Add(New Label With {.Text = "ISO:", .Location = New Point(200, 522), .AutoSize = True, .Anchor = AnchorStyles.Bottom Or AnchorStyles.Left})
         _cbIso = New ComboBox With {.Location = New Point(238, 518), .Size = New Size(110, 24), .DropDownStyle = ComboBoxStyle.DropDownList, .Anchor = AnchorStyles.Bottom Or AnchorStyles.Left}
         Me.Controls.Add(_cbIso)
+
+        ' The PictureBox zooms every frame to the same area, so a 320x240 stream looks
+        ' identical to 640x480 apart from being softer - report the real frame size (and
+        ' rate) so a size change is actually visible.
+        _lblInfo = New Label With {.Location = New Point(500, 522), .AutoSize = True,
+                                   .ForeColor = Color.DimGray,
+                                   .Anchor = AnchorStyles.Bottom Or AnchorStyles.Right}
+        Me.Controls.Add(_lblInfo)
 
         Dim btnClose As New Button With {.Text = "Close", .Location = New Point(612, 517), .Size = New Size(80, 26), .Anchor = AnchorStyles.Bottom Or AnchorStyles.Right}
         AddHandler btnClose.Click, Sub(s, e) Me.Close()
@@ -139,6 +151,15 @@ Public Class LiveViewForm
                 Dim old As Image = _pic.Image
                 _pic.Image = img
                 If old IsNot Nothing Then old.Dispose()
+
+                _framesSeen += 1
+                If (DateTime.UtcNow - _lastInfo).TotalMilliseconds >= 1000 Then
+                    Dim fps As Integer = _framesSeen - _lastCount
+                    If _lastInfo = DateTime.MinValue Then fps = 0
+                    _lblInfo.Text = String.Format("{0}x{1}   {2} fps", img.Width, img.Height, fps)
+                    _lastInfo = DateTime.UtcNow
+                    _lastCount = _framesSeen
+                End If
             End If
         Catch
         Finally
