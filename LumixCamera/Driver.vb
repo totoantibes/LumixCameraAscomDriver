@@ -341,8 +341,13 @@ Public Class Camera
         ' never diverge. The old hand-maintained copy was missing "1250" and used
         ' "i_auto" where ISOTable (and the value actually sent to the camera) uses
         ' "auto" — that mismatch made Auto/1250 map to the wrong gain index.
+        ' Skip the non-numeric entries ("auto", "i_iso"): ASCOM Gain is an index into
+        ' Gains and every entry must be a real, selectable gain. With them present,
+        ' gain index 0 selected Auto ISO - the camera then picks its own sensitivity,
+        ' which is never what an imaging client asking for a specific gain wants.
         For Each isoValue As String In ISOTable
-            ISOTableAL.Add(isoValue)
+            Dim numericIso As Integer
+            If Integer.TryParse(isoValue, numericIso) Then ISOTableAL.Add(isoValue)
         Next
 
         If Models.Contains("GX9") = False Then
