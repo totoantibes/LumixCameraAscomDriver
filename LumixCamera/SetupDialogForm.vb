@@ -66,38 +66,41 @@ Public Class SetupDialogForm
     ''' sensible default; the chosen value is persisted (My.Settings.ConnectionMode).
     ''' </summary>
     Private Sub BuildModeSelector()
-        ' Two rows: the mode combo and the Live View button share the first, the status
-        ' text gets the second. The form is only ~370px wide, so a single row put the
-        ' button on top of the combo and pushed the status label off the edge.
-        Const shift As Integer = 72
+        ' Three stacked rows, each on its own line so nothing can overlap on this narrow
+        ' (~370px) form: the mode combo, then the USB/Tether status text, then the Live
+        ' View button. The combo lines up with the other dropdowns and the button with
+        ' the other left-hand buttons.
+        Const rowMode As Integer = 8
+        Const rowStatus As Integer = 40
+        Const rowButton As Integer = 62
+        Const shift As Integer = 96
+
         Me.ClientSize = New Drawing.Size(Me.ClientSize.Width, Me.ClientSize.Height + shift)
         For Each c As Control In Me.Controls
             c.Top += shift
         Next
 
         Dim rightEdge As Integer = Me.ClientSize.Width - 10
-        Dim btnWidth As Integer = 96
 
-        Me.Controls.Add(New Label With {.Text = "Connection:", .Location = New Drawing.Point(12, 12), .AutoSize = True})
+        Me.Controls.Add(New Label With {.Text = "Connection:", .Location = New Drawing.Point(12, rowMode + 4), .AutoSize = True})
         CBConnectionMode = New ComboBox With {
             .DropDownStyle = ComboBoxStyle.DropDownList,
-            .Location = New Drawing.Point(100, 8),
-            .Size = New Drawing.Size(Math.Max(120, rightEdge - btnWidth - 108), 24)}
+            .Location = New Drawing.Point(125, rowMode),
+            .Size = New Drawing.Size(Math.Max(120, rightEdge - 125), 24)}
         CBConnectionMode.Items.AddRange(New Object() {ModeDisplay("WiFi"), ModeDisplay("USB"), ModeDisplay("USBExtended")})
         Me.Controls.Add(CBConnectionMode)
 
-        btnLiveView = New Button With {
-            .Text = "Live View…", .Location = New Drawing.Point(rightEdge - btnWidth, 8),
-            .Size = New Drawing.Size(btnWidth, 26), .Anchor = AnchorStyles.Top Or AnchorStyles.Right}
-        AddHandler btnLiveView.Click, AddressOf OpenLiveView
-        Me.Controls.Add(btnLiveView)
-
-        ' Second row - full width, so it can say whatever it needs to.
         lblModeStatus = New Label With {
-            .Location = New Drawing.Point(12, 42), .AutoSize = False,
+            .Location = New Drawing.Point(12, rowStatus), .AutoSize = False,
             .Size = New Drawing.Size(rightEdge - 12, 18),
             .AutoEllipsis = True, .ForeColor = Drawing.Color.DimGray}
         Me.Controls.Add(lblModeStatus)
+
+        btnLiveView = New Button With {
+            .Text = "Live View…", .Location = New Drawing.Point(12, rowButton),
+            .Size = New Drawing.Size(110, 26)}
+        AddHandler btnLiveView.Click, AddressOf OpenLiveView
+        Me.Controls.Add(btnLiveView)
 
         Dim usbPresent As Boolean = UsbTransport.IsUsbCameraPresent()
         Dim tetherPresent As Boolean = UsbTransport.IsTetherInstalled()
