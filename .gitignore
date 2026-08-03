@@ -17,6 +17,12 @@
 [Rr]eleases/
 x64/
 x86/
+# ...but LumixCamera/native/{x64,x86} is SOURCE, not build output: it holds the
+# bundled public Lumix USB SDK that the vbproj copies to the output directory.
+# The blanket x64/ rule above silently excluded it, so a clean clone of this
+# branch failed to build with MSB3030 (Lmxptpif.dll not found).
+!LumixCamera/native/
+!LumixCamera/native/**
 bld/
 [Bb]in/
 [Oo]bj/

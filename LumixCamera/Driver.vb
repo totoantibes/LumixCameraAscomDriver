@@ -523,6 +523,10 @@ Public Class Camera
             Dim d As MyDelegate2 = AddressOf Polling
 
             If value Then
+                If My.Settings.ConnectionMode.StartsWith("USB") Then
+                    ConnectUsb()
+                    Return
+                End If
                 TL.LogMessage("Connected Set", "Connecting to IP Address " + IPAddress)
                 ' TODO connect to the device
                 IPAddress = My.Settings.IPAddress
@@ -581,6 +585,11 @@ Public Class Camera
 
 
             Else
+                If My.Settings.ConnectionMode.StartsWith("USB") Then
+                    connectedState = False
+                    UsbTransport.Disconnect()
+                    Return
+                End If
                 connectedState = False
                 TL.LogMessage("Connected Set", "Disconnecting from IP Address " + IPAddress)
                 ' TODO disconnect from the device
@@ -630,7 +639,8 @@ Public Class Camera
         Get
             Dim m_version As Version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version
             ' TODO customise this driver description
-            Dim s_driverInfo As String = "Lumix Wifi Ascom driver. Version: " + m_version.Major.ToString() + "." + m_version.Minor.ToString()
+            ' Not "Wifi" any more - the driver also talks to the camera over USB.
+            Dim s_driverInfo As String = "Lumix ASCOM driver (WiFi + USB). Version: " + m_version.Major.ToString() + "." + m_version.Minor.ToString()
             TL.LogMessage("DriverInfo Get", s_driverInfo)
             Return s_driverInfo
         End Get
@@ -987,7 +997,12 @@ Public Class Camera
             'Throw New ASCOM.PropertyNotImplementedException("Gain", False)
         End Get
         Set(value As Short)
-            ' Gain is an index into Gains (= ISOTableAL); send the ISO value AT that
+            If My.Settings.ConnectionMode.StartsWith("USB") Then
+                UsbTransport.SetIsoIndex(value) ' index into the camera's supported ISO list
+                CurrentISO = value
+                Return
+            End If
+                        ' Gain is an index into Gains (= ISOTableAL); send the ISO value AT that
             ' index, not the index number itself (was 'ISO + value' -> e.g. value=17,
             ' which the camera rejects). Connect sets Gain = IndexOf(saved ISO), so
             ' this also stops connect from clobbering the ISO the setup dialog sent.
@@ -1020,6 +1035,11 @@ Public Class Camera
     Public ReadOnly Property Gains() As ArrayList Implements ICameraV2.Gains
         Get
             TL.LogMessage("Gains Get", "returning the list of ISO values")
+            If My.Settings.ConnectionMode.StartsWith("USB") AndAlso UsbTransport.IsConnected Then
+                ' Gain is an index, so the advertised list must be the same one SetIsoIndex
+                ' indexes into — the camera's own ISO capability list, not the WiFi table.
+                Return New ArrayList(UsbTransport.IsoDisplay())
+            End If
             Return ISOTableAL
             'Throw New ASCOM.PropertyNotImplementedException("Gains", False)
         End Get
@@ -1148,7 +1168,7 @@ Public Class Camera
             Dim imgW As Integer = Math.Min(cameraNumX, bitmapSource.PixelWidth)
             Dim imgH As Integer = Math.Min(cameraNumY, bitmapSource.PixelHeight)
 
-            If CurrentROM = 1 Then  'RAW
+            If ReadoutIsRaw() Then  'RAW
                 Dim pixels(bitmapSource.PixelHeight * stride * 2) As Byte
                 bitmapSource.CopyPixels(pixels, stride, 0)
                 For y = 0 To (imgH - 2)
@@ -1337,21 +1357,30 @@ Public Class Camera
 
     Public Property ReadoutMode() As Short Implements ICameraV2.ReadoutMode
         Get
-            If CurrentROM >= ROM.Length Then Return 0 ' never index ROM() out of range
-            TL.LogMessage("ReadoutMode Get", ROM(CurrentROM))
+            TL.LogMessage("ReadoutMode Get", ReadoutModeName())
             Return CurrentROM
             'Throw New ASCOM.PropertyNotImplementedException("ReadoutMode", False)
         End Get
         Set(value As Short)
-            ' ReadoutMode is an index into ReadoutModes. Validate before using it to
-            ' index ROM(): an out-of-range value used to raise a raw
-            ' IndexOutOfRangeException out of the logging line, where ASCOM requires
-            ' InvalidValueException (and any conformance checker sets one deliberately).
-            If value < 0 OrElse value >= ROM.Length Then
+            ' Validate against the modes this transport actually offers - the list is
+            ' shorter over USB. An out-of-range value used to index ROM() and escape as a
+            ' raw IndexOutOfRangeException where ASCOM requires InvalidValueException.
+            Dim modes As ArrayList = ActiveReadoutModes()
+            If value < 0 OrElse value >= modes.Count Then
                 TL.LogMessage("ReadoutMode Set", "rejected out-of-range value " & value.ToString())
-                Throw New ASCOM.InvalidValueException("ReadoutMode", value.ToString(), "0.." & (ROM.Length - 1).ToString())
+                Throw New ASCOM.InvalidValueException("ReadoutMode", value.ToString(), "0.." & (modes.Count - 1).ToString())
             End If
-            TL.LogMessage("ReadoutMode Set", ROM(value).ToString)
+            TL.LogMessage("ReadoutMode Set", CStr(modes(value)))
+            If My.Settings.ConnectionMode.StartsWith("USB") Then
+                ' No cam.cgi over USB. Extended can genuinely switch the body between RAW
+                ' and JPEG; Standard cannot (the public SDK exports no ImageInfo_* calls),
+                ' so its list is RAW-only and there is nothing to send.
+                If My.Settings.ConnectionMode = "USBExtended" Then
+                    UsbTransport.SetImageQuality(CStr(modes(value)) = "RAW")
+                End If
+                CurrentROM = value
+                Return
+            End If
             SendLumixMessage(QUALITY + "raw_fine")
             'Select Case value
             '    Case 0, 2
@@ -1366,11 +1395,48 @@ Public Class Camera
 
     Public ReadOnly Property ReadoutModes() As ArrayList Implements ICameraV2.ReadoutModes
         Get
-            TL.LogMessage("ReadoutModes Get", "JPG, RAW or Thumb")
-            Return ROMAL
+            Dim modes As ArrayList = ActiveReadoutModes()
+            TL.LogMessage("ReadoutModes Get", String.Join(", ", modes.ToArray()))
+            Return modes
             'Throw New ASCOM.PropertyNotImplementedException("ReadoutModes", False)
         End Get
     End Property
+
+    ''' <summary>
+    ''' The readout modes this transport can actually deliver. WiFi fetches JPG, RAW or a
+    ''' thumbnail over DLNA. USB does not: the capture path takes whatever the body
+    ''' produces, there is no thumbnail call at all, and only the Tether ABI can change
+    ''' the image quality (ImageInfo_Set_ImageQuality) - the public SDK exports nothing
+    ''' for it. Advertising all three over USB offered choices that silently did nothing.
+    ''' </summary>
+    Private Function ActiveReadoutModes() As ArrayList
+        Return ReadoutModesFor(My.Settings.ConnectionMode)
+    End Function
+
+    ''' <summary>
+    ''' The readout modes a given transport can deliver. Shared so the setup dialog
+    ''' offers exactly what the driver will honour - it used to show a fixed
+    ''' JPG/RAW/Thumb list from the designer regardless of transport.
+    ''' </summary>
+    Public Shared Function ReadoutModesFor(connectionMode As String) As ArrayList
+        Select Case connectionMode
+            Case "USBExtended" : Return New ArrayList(New String() {"RAW", "JPG"})
+            Case "USB" : Return New ArrayList(New String() {"RAW"})
+            Case Else : Return New ArrayList(New String() {"JPG", "RAW", "Thumb"})
+        End Select
+    End Function
+
+    ''' <summary>Name of the selected readout mode, or "RAW" if the index is unusable.</summary>
+    Private Function ReadoutModeName() As String
+        Dim modes As ArrayList = ActiveReadoutModes()
+        If CurrentROM >= 0 AndAlso CurrentROM < modes.Count Then Return CStr(modes(CurrentROM))
+        Return "RAW"
+    End Function
+
+    ''' <summary>True when the selected readout mode is RAW (was 'CurrentROM = 1').</summary>
+    Private Function ReadoutIsRaw() As Boolean
+        Return ReadoutModeName() = "RAW"
+    End Function
 
     Public ReadOnly Property SensorName() As String Implements ICameraV2.SensorName
         Get
@@ -1554,6 +1620,113 @@ Public Class Camera
     'depending on the transfer format the img is fetched either in RAW or in JPG
 
 
+    ''' <summary>Connect over USB (Standard/public SDK) and set sensor geometry from the model.</summary>
+    Private Sub ConnectUsb()
+        Try
+            UsbTransport.Connect(My.Settings.ConnectionMode = "USBExtended")
+            MODEL = UsbTransport.ModelName
+            TempPath = My.Settings.TempPath
+            Dim w As Integer, h As Integer, p As Double
+            UsbTransport.GetSpecs(MODEL, w, h, p)
+            ccdWidth = w : ccdHeight = h
+            cameraNumX = w : cameraNumY = h
+            pixelSize = p                     ' PixelSizeX/Y in microns
+            sensormmx = p * w / 1000.0        ' keep sensor-mm consistent with pitch
+            sensormmy = p * h / 1000.0
+            ' Honour the transfer format chosen in the setup dialog, falling back to RAW
+            ' (index 0 in the USB lists). Set the field, not the property, whose WiFi
+            ' branch posts cam.cgi.
+            Dim usbModes As ArrayList = ActiveReadoutModes()
+            Dim romIdx As Integer = usbModes.IndexOf(My.Settings.TransferFormat)
+            If romIdx < 0 Then romIdx = usbModes.IndexOf("RAW")
+            If romIdx < 0 Then romIdx = 0
+            CurrentROM = CUShort(romIdx)
+            If My.Settings.ConnectionMode = "USBExtended" Then
+                UsbTransport.SetImageQuality(CStr(usbModes(romIdx)) = "RAW")
+            End If
+            connectedState = True
+            TL.LogMessage("Connected Set", "USB connected: " & MODEL & " (" & w & "x" & h & ")")
+        Catch ex As Exception
+            connectedState = False
+            TL.LogMessage("USB connect failed", ex.Message)
+            Throw New ASCOM.DriverException("USB connect failed: " & ex.Message)
+        End Try
+    End Sub
+
+    ''' <summary>Background worker: one-shot USB capture -> file -> TIFF -> ImageReady.</summary>
+    Private Sub UsbCaptureWorker()
+        Try
+            Dim dur As Double = cameraLastExposureDuration
+            Dim res As ASCOM.Lumix.Usb.CaptureResult
+            If UsbTransport.IsExtended AndAlso dur > 1.0 Then
+                ' Extended mode: hold the shutter open for the exact time (bulb), any duration incl. >60s.
+                TL.LogMessage("USB capture", "bulb " & dur & "s")
+                res = UsbTransport.CaptureBulb(TempPath, dur, CInt(dur * 1000) + 120000)
+            Else
+                ' Snap to the nearest supported discrete shutter speed and fire a one-shot.
+                Dim actual As Double = UsbTransport.SetShutterSeconds(dur)
+                TL.LogMessage("USB capture", "requested " & dur & "s -> nearest " & actual & "s")
+                res = UsbTransport.Capture(TempPath, 90000)
+            End If
+            If res IsNot Nothing AndAlso res.Success Then
+                ConvertToTiff(res.FilePath, res.Format <> 1) ' format 1 = JPEG, otherwise RAW
+                If Not String.IsNullOrEmpty(TiffFileName) AndAlso IO.File.Exists(TiffFileName) Then
+                    cameraImageReady = True
+                    CurrentState = CameraStates.cameraIdle
+                    TL.LogMessage("USB capture", "image ready: " & res.FilePath)
+                Else
+                    CurrentState = CameraStates.cameraError
+                    TL.LogMessage("USB capture", "conversion produced no TIFF")
+                End If
+            ElseIf res IsNot Nothing AndAlso res.Error = "Aborted." Then
+                ' A capture the client aborted is not a failure - go back to idle, or
+                ' every AbortExposure leaves the camera reporting cameraError.
+                CurrentState = CameraStates.cameraIdle
+                TL.LogMessage("USB capture", "aborted by the client")
+            Else
+                CurrentState = CameraStates.cameraError
+                TL.LogMessage("USB capture failed", If(res IsNot Nothing, res.Error, "null result"))
+            End If
+        Catch ex As Exception
+            CurrentState = CameraStates.cameraError
+            TL.LogMessage("USB capture exception", ex.Message)
+        End Try
+    End Sub
+
+    ''' <summary>Convert a captured RW2/JPG file to the TIFF the ImageArray path reads.</summary>
+    Private Sub ConvertToTiff(imagepath As String, isRaw As Boolean)
+        TiffFileName = imagepath.Substring(0, imagepath.Length - 3) & "tif"
+        Try
+            If isRaw Then
+                Dim h As IntPtr
+                If IntPtr.Size = 8 Then
+                    h = libraw_init64(1)
+                    libraw_open_file64(h, imagepath)
+                    libraw_unpack64(h)
+                    libraw_set_output_tif64(h, 1)
+                    libraw_dcraw_process64(h)
+                    libraw_dcraw_ppm_tiff_writer64(h, TiffFileName)
+                    libraw_close64(h)
+                Else
+                    h = libraw_init32(1)
+                    libraw_open_file32(h, imagepath)
+                    libraw_unpack32(h)
+                    libraw_set_output_tif32(h, 1)
+                    libraw_dcraw_process32(h)
+                    libraw_dcraw_ppm_tiff_writer32(h, TiffFileName)
+                    libraw_close32(h)
+                End If
+            Else
+                Dim jpg = Image.FromFile(imagepath)
+                jpg.Save(TiffFileName, System.Drawing.Imaging.ImageFormat.Tiff)
+                jpg.Dispose()
+            End If
+            Try : My.Computer.FileSystem.DeleteFile(imagepath) : Catch : End Try
+        Catch ex As Exception
+            TL.LogMessage("ConvertToTiff", "failed: " & ex.Message)
+        End Try
+    End Sub
+
     Public Sub StartExposure(Duration As Double, Light As Boolean) Implements ICameraV2.StartExposure
         If (Duration < 0.0) Then Throw New InvalidValueException("StartExposure", Duration.ToString(), "0.0 upwards")
         If (cameraStartX + cameraNumX > ccdWidth) Then Throw New InvalidValueException("StartExposure", cameraNumX.ToString(), ccdWidth.ToString())
@@ -1568,7 +1741,18 @@ Public Class Camera
         cameraImageArray = Nothing
         cameraImageArrayVariant = Nothing
         cameraLastExposureDuration = Duration
-        ' The camera-start HTTP round-trips now happen in WaitBulb (the async part) so
+        exposureStart = DateTime.Now
+        If My.Settings.ConnectionMode.StartsWith("USB") Then
+            ' USB: fire the capture on a background thread so StartExposure returns
+            ' promptly. NOTE: exposure-time -> raw shutter mapping is a follow-up; this
+            ' captures at the camera's current shutter setting.
+            CurrentState = CameraStates.cameraExposing
+            Dim t As New System.Threading.Thread(AddressOf UsbCaptureWorker)
+            t.IsBackground = True
+            t.Start()
+            Return
+        End If
+                ' The camera-start HTTP round-trips now happen in WaitBulb (the async part) so
         ' StartExposure returns promptly, as ASCOM expects.
         TL.LogMessage("StartExposure", Duration.ToString() + " " + Light.ToString())
         CurrentState = CameraStates.cameraExposing
@@ -1944,6 +2128,13 @@ Public Class Camera
     End Property
 
     Public Sub StopExposure() Implements ICameraV2.StopExposure
+        If My.Settings.ConnectionMode.StartsWith("USB") Then
+            ' No cam.cgi over USB. Ending the capture also matters for safety: a
+            ' disconnect while the SDK still has a capture in flight faults the native
+            ' library (an AccessViolation that takes the host process down).
+            UsbTransport.AbortCapture()
+            Return
+        End If
         SendLumixMessage(SHUTTERSTOP)
     End Sub
 

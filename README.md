@@ -2,7 +2,12 @@
 
 ## Purpose
 
-This driver provides an interface to the Lumix http over wifi remote control protocol in order to present lumix cameras as ASCOM cameras and be used by astro photo software like APT. The camera believes that it is connected to the Panasonic ImageApp
+This driver presents Lumix cameras as ASCOM cameras so they can be used by astro photo software like APT, NINA or SharpCap. It can talk to the camera two ways:
+
+* **Wi-Fi** - the Lumix http remote control protocol. The camera believes that it is connected to the Panasonic ImageApp.
+* **USB** - the Panasonic Lumix USB (PTP) SDK, over the cable. Much faster than Wi-Fi and there is no wireless session to drop.
+
+See [Connection modes](#connection-modes) for what each one supports.
 
 The driver was tested with the G80, GH4 and GH5s but should work with all Wifi Lumix.
 16MP sensor was the prototype. Now it is possible to work with a range of sensor sizes such as:  
@@ -14,7 +19,7 @@ The driver was tested with the G80, GH4 and GH5s but should work with all Wifi L
 
 
 Notes: 
-1. Since ASCOM does not expose any "liveView" or video mode this is not implemented here. 
+1. ASCOM still exposes no "liveView" or video mode, so it cannot be handed to your imaging software. The driver now provides its own **Live View window**, opened from the setup dialog, on both Wi-Fi and USB - useful for framing and focusing. See [Live view](#live-view).
 Mostly this driver sets the ISO (i.e. Gain), ShutterSpeed, Capture (Start and Abort) and GetImageArray methods along with other needed methods for ASCOM.
 3. All settings are stored in the ASCOM Proflie Explorer
 4. Trace log is stored in default ASCOM location 
@@ -22,6 +27,28 @@ Mostly this driver sets the ISO (i.e. Gain), ShutterSpeed, Capture (Start and Ab
 
 
  
+## Connection modes
+
+Pick the transport at the top of the setup dialog. The driver detects a cabled camera
+and preselects USB when it finds one, because the body cannot be on Wi-Fi and USB at
+the same time.
+
+| | Wi-Fi | USB (Standard) | USB Extended (Tether) |
+|---|---|---|---|
+| needs | camera on the same network, in "Remote Shooting" | USB cable, camera in PC mode | as USB, plus Panasonic **LUMIX Tether** installed |
+| transfer formats | JPG, RAW, Thumb | RAW | RAW, JPG |
+| exposures | discrete speeds + bulb | discrete speeds | discrete speeds **and bulb of any length, including over 60 s** |
+| live view | yes (MJPEG over UDP, VGA or QVGA) | yes | yes |
+| speed | ~14-20 s per RAW frame | ~3-6 s per frame | ~3-6 s per frame |
+| 32-bit build | yes | no | no |
+
+**USB Extended** is the interesting one: it uses the fuller SDK that ships with Panasonic's
+LUMIX Tether application, which is what makes exposures longer than 60 seconds possible.
+The Tether application itself is never launched - only its SDK is used, and it is not
+redistributed with this driver. Install LUMIX Tether from Panasonic if you want that mode.
+
+**USB is 64-bit only.** The Lumix USB SDK is x64, so the 32-bit driver is Wi-Fi only.
+
 ## Usage
 
 A [Video tutorial](https://www.youtube.com/watch?v=pKYlJDv_kuE) is available  
@@ -56,7 +83,26 @@ To connect your PC to the camera:
 	11. You can now shoot!
 	![](./readme_files/image017.png)  
 	12. in APT you can then also (and more importantly) use the image received by the driver to perform platesolving.  
-	13. AGAIN NO LIVEVIEW supported. this is beyond what ASCOM does. For Live view you can look at alternatives discussed [here](https://www.personal-view.com/talks/discussion/6703/control-your-gh3-from-a-web-browser-now-with-video-/p1) the beauty is that they can work in parallel to the ASCOM driver since the Lumix camera is just a "Media Server".
+	13. Live view is not passed to your imaging software - ASCOM has no interface for it - but the driver has its own preview window. See [Live view](#live-view) below.
+
+### Connecting over USB
+
+1.	On the camera: set the USB mode to PC / tethered shooting, and plug the cable in. Turn Wi-Fi off - the body will not do both.
+2.	On the PC: open the driver's Properties as above. The **Connection** dropdown at the top should already show *USB (Standard)* or *USB Extended (Tether)*, and the status line underneath names the camera it found (e.g. `USB cam: DC-GH5S   Tether: found`).
+3.	Choose the transfer format (RAW, or RAW/JPG in Extended), the temp folder, and press OK.
+4.	Connect from your imaging software as usual. No IP address and no network discovery are involved.
+
+### Live view
+
+Press **Live View...** in the setup dialog. It works on both transports and shows the
+frame size and rate so you can tell what you are getting.
+
+* Over **Wi-Fi** the camera streams MJPEG over UDP. You can pick **VGA** (640x480) or
+  **QVGA** (320x240) - QVGA halves the bandwidth on a weak link. Changing size restarts
+  the stream, so expect a short black gap.
+* Over **USB** the frames come from the SDK.
+* The Wi-Fi stream arrives on an inbound UDP port, so **Windows Firewall must allow your
+  imaging application**. If you get no frames, that is the first thing to check.
 
 
 
@@ -78,7 +124,31 @@ I added a "thumb" transfer mode which takes a large thumbnail of the image (1440
 There used to be an issue with the lastest RW@ 14 bt formats that were not handled by DCraw. This new driver version now relies on LibRaw which is maintained up to date. The latest version of LibRaw.dll is included with the setup and should be installed in the same folder as the driver. I am expecting that just replacing the DLL with a most updated on should fix other RAW format issues that may emeger in the future.
 
 # Installation
-for windows 32 and 64 bit. download and run ASCOM.Lumix.Camera Setup.exe.
+
+You need the ASCOM [platform](https://ascom-standards.org/) 6.2 or later.
+
+* **64-bit (recommended)** - run **ASCOM.Lumix.Camera Setup.exe**. Wi-Fi **and** USB.
+* **32-bit** - run **ASCOM.Lumix.Camera Setup32.exe**. **Wi-Fi only**: the Lumix USB SDK
+  is 64-bit, so a 32-bit host cannot load it. Only use this if your imaging software is
+  32-bit and you do not need USB.
+
+Both install to the same place, so installing one replaces the other.
+
+For **USB Extended** (bulb over 60 s) also install Panasonic's **LUMIX Tether**. The
+driver uses its SDK where it is installed; nothing from Tether is redistributed here.
+
+### Building the installers
+
+```
+msbuild LumixCamera\LumixCamera.vbproj -p:Configuration=Release -p:Platform=x64
+msbuild LumixCamera\LumixCamera.vbproj -t:Rebuild -p:Configuration=Release -p:Platform=x86 -p:RegisterForComInterop=false
+ISCC "LumixCamera\ASCOM.Lumix.Camera Setup.iss"
+ISCC "LumixCamera\ASCOM.Lumix.Camera Setup32.iss"
+```
+
+The x86 build passes `RegisterForComInterop=false` because the installer registers the
+assembly itself, and registering during an x86 build fails while an x64 output is present
+(MSB3097). Both installers write to the repository root.
 
 Implements:	ASCOM Camera interface version: 2.0
  Author:		robert hasson robert_hasson@yahoo.com

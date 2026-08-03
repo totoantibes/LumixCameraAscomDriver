@@ -12,7 +12,7 @@ Imports System.Runtime.InteropServices
 <Assembly: AssemblyDescription("ASCOM Camera driver for Lumix")>
 <Assembly: AssemblyCompany("ASCOM Initiative")>
 <Assembly: AssemblyProduct("ASCOM Camera driver for Lumix")>
-<Assembly: AssemblyCopyright("Copyright © 2018, The ASCOM Intiative")>
+<Assembly: AssemblyCopyright("Copyright ï¿½ 2018, The ASCOM Intiative")>
 <Assembly: AssemblyTrademark("")>
 
 <Assembly: ComVisible(True)>
@@ -30,5 +30,5 @@ Imports System.Runtime.InteropServices
 ' You can specify all the values or you can default the Build and Revision Numbers 
 ' by using the '*' as shown below:
 
-<Assembly: AssemblyVersion("7.5.0")>
-<Assembly: AssemblyFileVersion("7.5.0")>
+<Assembly: AssemblyVersion("8.0.0")>
+<Assembly: AssemblyFileVersion("8.0.0")>

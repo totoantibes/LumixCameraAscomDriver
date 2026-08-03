@@ -41,6 +41,7 @@ Public Class SetupDialogForm
         If CBReadoutMode.SelectedItem IsNot Nothing Then My.Settings.TransferFormat = CBReadoutMode.SelectedItem.ToString()
         My.Settings.IPAddress = cam.IPAddress
         My.Settings.TempPath = TBTempPath.Text
+        My.Settings.ConnectionMode = SelectedMode ' persist the chosen transport for next session
         Me.DialogResult = System.Windows.Forms.DialogResult.OK
         Me.Close()
     End Sub
@@ -93,7 +94,200 @@ Public Class SetupDialogForm
         For i = 0 To 58
             CBShutterSpeed.Items.Add(Camera.ShutterTable(i, 1))
         Next
+        BuildModeSelector()
     End Sub
+
+    Private CBConnectionMode As ComboBox
+    Private lblModeStatus As Label
+    Private btnLiveView As Button
+
+    ''' <summary>
+    ''' Add the connection-mode selector at the top of the form (WiFi / USB / USB
+    ''' Extended). Detects a connected USB camera and the Tether DLL to preselect a
+    ''' sensible default; the chosen value is persisted (My.Settings.ConnectionMode).
+    ''' </summary>
+    Private Sub BuildModeSelector()
+        ' Three stacked rows, each on its own line so nothing can overlap on this narrow
+        ' (~370px) form: the mode combo, then the USB/Tether status text, then the Live
+        ' View button. The combo lines up with the other dropdowns and the button with
+        ' the other left-hand buttons.
+        Const rowMode As Integer = 8
+        Const rowStatus As Integer = 40
+        Const rowButton As Integer = 62
+        Const shift As Integer = 96
+
+        Me.ClientSize = New Drawing.Size(Me.ClientSize.Width, Me.ClientSize.Height + shift)
+        For Each c As Control In Me.Controls
+            c.Top += shift
+        Next
+
+        Dim rightEdge As Integer = Me.ClientSize.Width - 10
+
+        Me.Controls.Add(New Label With {.Text = "Connection:", .Location = New Drawing.Point(12, rowMode + 4), .AutoSize = True})
+        CBConnectionMode = New ComboBox With {
+            .DropDownStyle = ComboBoxStyle.DropDownList,
+            .Location = New Drawing.Point(125, rowMode),
+            .Size = New Drawing.Size(Math.Max(120, rightEdge - 125), 24)}
+        CBConnectionMode.Items.AddRange(New Object() {ModeDisplay("WiFi"), ModeDisplay("USB"), ModeDisplay("USBExtended")})
+        Me.Controls.Add(CBConnectionMode)
+
+        lblModeStatus = New Label With {
+            .Location = New Drawing.Point(12, rowStatus), .AutoSize = False,
+            .Size = New Drawing.Size(rightEdge - 12, 18),
+            .AutoEllipsis = True, .ForeColor = Drawing.Color.DimGray}
+        Me.Controls.Add(lblModeStatus)
+
+        btnLiveView = New Button With {
+            .Text = "Live View…", .Location = New Drawing.Point(12, rowButton),
+            .Size = New Drawing.Size(110, 26)}
+        AddHandler btnLiveView.Click, AddressOf OpenLiveView
+        Me.Controls.Add(btnLiveView)
+
+        Dim usbModel As String = UsbTransport.UsbCameraModel()
+        Dim usbPresent As Boolean = Not String.IsNullOrEmpty(usbModel)
+        Dim tetherPresent As Boolean = UsbTransport.IsTetherInstalled()
+        lblModeStatus.Text = String.Format("USB cam: {0}   Tether: {1}",
+            If(usbPresent, usbModel, "none"), If(tetherPresent, "found", "not found"))
+
+        ' Show the model straight away when a camera is cabled. Only the WiFi discovery
+        ' used to fill this in, so over USB it stayed "No Model found yet" until the
+        ' client connected. If WiFi discovery runs later it overwrites this with the
+        ' model the camera reports over the network, which is what we want in that mode.
+        If usbPresent Then Label8.Text = usbModel
+
+        ' Retain the saved choice when the hardware still supports it; otherwise fall
+        ' back to what is actually available now.
+        ' A cabled camera outranks a saved "WiFi": the body cannot be on both at once, so
+        ' a USB camera means the WiFi side is gone. Honouring the stale choice made the
+        ' dialog scan the LAN for a camera that had moved to USB and sit there until it
+        ' timed out before the user could pick USB by hand.
+        Dim saved As String = My.Settings.ConnectionMode
+        Dim preselect As String
+        If saved = "USBExtended" AndAlso usbPresent AndAlso tetherPresent Then
+            preselect = "USBExtended"
+        ElseIf saved = "USB" AndAlso usbPresent Then
+            preselect = "USB"
+        ElseIf usbPresent AndAlso tetherPresent Then
+            preselect = "USBExtended"
+        ElseIf usbPresent Then
+            preselect = "USB"
+        Else
+            preselect = "WiFi"
+        End If
+        CBConnectionMode.SelectedItem = ModeDisplay(preselect)
+
+        ' Live view works on both transports: the USB SDK hands over frames directly,
+        ' and WiFi streams MJPEG over UDP once the camera has been told where to send it.
+        ' Re-check on a mode change AND on an IP change - in WiFi the IP only appears
+        ' once InitUI has run, which is after this constructor.
+        RefreshLiveViewButton()
+        AddHandler CBConnectionMode.SelectedIndexChanged,
+            Sub(s, e)
+                ' Discovery runs at Load only when WiFi is the starting mode. If the user
+                ' picks WiFi later, run it then - once - so the IP list is populated
+                ' without making every USB session pay for a LAN scan.
+                If SelectedMode = "WiFi" AndAlso Not _discoveryDone Then
+                    _discoveryDone = True
+                    Using New WaitCursorScope(Me)
+                        InitUI()
+                    End Using
+                End If
+                RefreshTransferFormats()   ' the offered formats differ per transport
+                RefreshLiveViewButton()
+            End Sub
+        AddHandler CBCameraIPAddress.SelectedIndexChanged, Sub(s, e) RefreshLiveViewButton()
+    End Sub
+
+    ''' <summary>True once the LAN discovery has been run for this dialog.</summary>
+    Private _discoveryDone As Boolean
+
+    ''' <summary>
+    ''' Fill the transfer-format combo from the modes the selected transport can deliver.
+    ''' The designer hardcodes JPG/RAW/Thumb, but USB Standard can only produce RAW and
+    ''' USB Extended only RAW or JPG - offering the rest let the user pick something the
+    ''' driver would silently ignore. Keeps the current choice when it is still valid,
+    ''' otherwise falls back to RAW.
+    ''' </summary>
+    Private Sub RefreshTransferFormats()
+        Dim wanted As String = TryCast(CBReadoutMode.SelectedItem, String)
+        If String.IsNullOrEmpty(wanted) Then wanted = My.Settings.TransferFormat
+
+        Dim allowed As ArrayList = Camera.ReadoutModesFor(SelectedMode)
+        CBReadoutMode.BeginUpdate()
+        CBReadoutMode.Items.Clear()
+        For Each m As String In allowed
+            CBReadoutMode.Items.Add(m)
+        Next
+        CBReadoutMode.EndUpdate()
+
+        Dim keep As Integer = CBReadoutMode.FindStringExact(If(wanted, ""))
+        If keep < 0 Then keep = CBReadoutMode.FindStringExact("RAW")
+        If keep < 0 Then keep = 0
+        CBReadoutMode.SelectedIndex = keep
+    End Sub
+
+    ''' <summary>Hourglass while the LAN scan runs - it is not instant.</summary>
+    Private NotInheritable Class WaitCursorScope
+        Implements IDisposable
+        Private ReadOnly _form As Form
+        Public Sub New(f As Form)
+            _form = f
+            _form.Cursor = Cursors.WaitCursor
+        End Sub
+        Public Sub Dispose() Implements IDisposable.Dispose
+            _form.Cursor = Cursors.Default
+        End Sub
+    End Class
+
+    ''' <summary>
+    ''' Enable/disable the Live View button for the current mode and IP. Called from the
+    ''' constructor, from Load (after discovery has found an IP) and on any mode or IP
+    ''' change - evaluating it only in the constructor left the button disabled in WiFi
+    ''' until the user toggled the mode away and back.
+    ''' </summary>
+    Private Sub RefreshLiveViewButton()
+        If btnLiveView Is Nothing Then Return
+        btnLiveView.Enabled = LiveViewAvailable()
+    End Sub
+
+    ''' <summary>
+    ''' USB can always open live view; WiFi needs an IP first, since the stream is
+    ''' started by an HTTP request to the camera.
+    ''' </summary>
+    Private Function LiveViewAvailable() As Boolean
+        If SelectedMode.StartsWith("USB") Then Return True
+        Return Not String.IsNullOrEmpty(cam.IPAddress) AndAlso cam.IPAddress <> Camera.IPAddressDefault
+    End Function
+
+    Private Sub OpenLiveView(sender As Object, e As EventArgs)
+        If Not LiveViewAvailable() Then Return
+        Using f As New LiveViewForm(SelectedMode = "USBExtended", Not SelectedMode.StartsWith("USB"), cam)
+            f.ShowDialog(Me)
+        End Using
+    End Sub
+
+    Private Shared Function ModeDisplay(mode As String) As String
+        Select Case mode
+            Case "USB" : Return "USB (Standard)"
+            Case "USBExtended" : Return "USB Extended (Tether)"
+            Case Else : Return "Wi-Fi (HTTP)"
+        End Select
+    End Function
+
+    Private Shared Function ModeFromDisplay(display As String) As String
+        If display Is Nothing Then Return "WiFi"
+        If display.StartsWith("USB Extended") Then Return "USBExtended"
+        If display.StartsWith("USB") Then Return "USB"
+        Return "WiFi"
+    End Function
+
+    ''' <summary>The connection mode currently selected in the dialog.</summary>
+    Private ReadOnly Property SelectedMode As String
+        Get
+            If CBConnectionMode Is Nothing OrElse CBConnectionMode.SelectedItem Is Nothing Then Return My.Settings.ConnectionMode
+            Return ModeFromDisplay(CBConnectionMode.SelectedItem.ToString())
+        End Get
+    End Property
 
     ''' <summary>
     ''' MIB_IPNETROW structure returned by GetIpNetTable
@@ -396,10 +590,10 @@ Public Class SetupDialogForm
             CBShutterSpeed.SelectedIndex = 58 ' Bulb shutter speed
         End If
 
-        ' Set default value for CBReadoutMode
-        If CBReadoutMode.Items.Count > 0 Then
-            CBReadoutMode.SelectedIndex = 2 ' Thumbnail readout mode
-        End If
+        ' Offer only the transfer formats this transport can actually deliver, and
+        ' default to RAW rather than the designer's hardcoded index 2 (Thumb) - which is
+        ' why a fresh setup came up reporting a 1440x1080 sensor.
+        RefreshTransferFormats()
 
 
 
