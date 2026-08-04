@@ -1172,26 +1172,40 @@ Public Class Camera
                 Return cameraImageArray
             End If
             CurrentState = CameraStates.cameraDownload
-            Dim Tiffimagefile As IO.FileStream
-            Tiffimagefile = New FileStream(TiffFileName, IO.FileMode.Open)
-            ReDim cameraImageArray(cameraNumX - 1, cameraNumY - 1) ' there are 3 channels: RVB. 
+            ReDim cameraImageArray(cameraNumX - 1, cameraNumY - 1) ' there are 3 channels: RVB.
 
-            Dim decoder As New TiffBitmapDecoder(Tiffimagefile, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.Default)
+            ' Pixels come either straight from LibRaw (RAW, decoded in memory) or from the
+            ' TIFF the JPG path still produces. Both are 8-bit BGR, so everything below is
+            ' the same code it always was.
             Dim stride As Int32
             Dim index As Int32
-            Dim bitmapSource As BitmapSource = decoder.Frames(0)
-            Dim bytesPerPixel As UShort
-            bytesPerPixel = bitmapSource.Format.BitsPerPixel / 8
-            stride = bitmapSource.PixelWidth * bytesPerPixel
+            Dim pixels As Byte()
+            Dim srcW As Integer, srcH As Integer
+            Dim Tiffimagefile As IO.FileStream = Nothing
+            If _rgbPixels IsNot Nothing Then
+                pixels = _rgbPixels
+                stride = _rgbStride
+                srcW = _rgbW
+                srcH = _rgbH
+            Else
+                Tiffimagefile = New FileStream(TiffFileName, IO.FileMode.Open)
+                Dim decoder As New TiffBitmapDecoder(Tiffimagefile, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.Default)
+                Dim bitmapSource As BitmapSource = decoder.Frames(0)
+                Dim bytesPerPixel As UShort = bitmapSource.Format.BitsPerPixel / 8
+                stride = bitmapSource.PixelWidth * bytesPerPixel
+                srcW = bitmapSource.PixelWidth
+                srcH = bitmapSource.PixelHeight
+                ReDim pixels(srcH * stride * 2)
+                bitmapSource.CopyPixels(pixels, stride, 0)
+            End If
+
             ' Clamp the copy to the smaller of the table size and the decoded image
             ' (the JPG/thumb is often smaller), so we never index past the pixel
             ' buffer or the output array.
-            Dim imgW As Integer = Math.Min(cameraNumX, bitmapSource.PixelWidth)
-            Dim imgH As Integer = Math.Min(cameraNumY, bitmapSource.PixelHeight)
+            Dim imgW As Integer = Math.Min(cameraNumX, srcW)
+            Dim imgH As Integer = Math.Min(cameraNumY, srcH)
 
             If ReadoutIsRaw() Then  'RAW
-                Dim pixels(bitmapSource.PixelHeight * stride * 2) As Byte
-                bitmapSource.CopyPixels(pixels, stride, 0)
                 For y = 0 To (imgH - 2)
                     For x = 0 To (imgW - 2)
                         index = x * 3 + (y * stride)
@@ -1204,13 +1218,11 @@ Public Class Camera
                     y += 1
                 Next y
             Else
-                Dim pixels(bitmapSource.PixelHeight * stride) As Byte
-                bitmapSource.CopyPixels(pixels, stride, 0)
                 For y = 0 To (imgH - 2)
                     For x = 0 To (imgW - 2)
                         index = x * 3 + (y * stride)
-                        cameraImageArray(x, y) = pixels(index + 2) * 256 'R 
-                        cameraImageArray(x + 1, y + 1) = pixels(index) * 256 'B 
+                        cameraImageArray(x, y) = pixels(index + 2) * 256 'R
+                        cameraImageArray(x + 1, y + 1) = pixels(index) * 256 'B
                         cameraImageArray(x + 1, y) = pixels(index + 1) * 256 'G
                         cameraImageArray(x, y + 1) = pixels(index + 1) * 256 'G
                         x += 1
@@ -1221,9 +1233,14 @@ Public Class Camera
 
             End If
 
+            ' The in-memory frame is a managed array - nothing to close or delete. Drop the
+            ' reference so a second exposure cannot serve the previous frame's pixels.
+            _rgbPixels = Nothing
             Try
-                Tiffimagefile.Dispose() 'cleaning up aftermyself and removing the Tiff file once it is used
-                My.Computer.FileSystem.DeleteFile(TiffFileName)
+                If Tiffimagefile IsNot Nothing Then
+                    Tiffimagefile.Dispose() 'cleaning up aftermyself and removing the Tiff file once it is used
+                    My.Computer.FileSystem.DeleteFile(TiffFileName)
+                End If
             Catch e As Exception
                 TL.LogMessage("ImageArray Get", "error in deleting the imagefile")
             End Try
@@ -1533,8 +1550,13 @@ Public Class Camera
     'typically num is 1 but was useful to have it as a variable when building the dialogue
     'got some issues with dealing the various XML formats so in the end the response from the camerais turned into a string but inside it is an XML...
 
-    Private Function GetPix(num As Int16) As String
-        SendLumixMessage(PLAYMODE)
+    ''' <param name="ensurePlaymode">
+    ''' Send PLAYMODE before browsing. The normal readout path has just done that itself,
+    ''' so it passes False; the download-resume path calls this precisely to nudge the
+    ''' camera back into playmode and needs it.
+    ''' </param>
+    Private Function GetPix(num As Int16, Optional ensurePlaymode As Boolean = True) As String
+        If ensurePlaymode Then SendLumixMessage(PLAYMODE)
         Dim Start As Int16 = 0
         ' Right after a capture the camera answers get_content_info with
         ' <result>err_busy</result> while it is still committing the file - longest for
@@ -1720,7 +1742,7 @@ Public Class Camera
                 swPhase.Restart()
                 ConvertToTiffFromBuffer(res.Data, res.Format <> 1) ' format 1 = JPEG, otherwise RAW
                 TL.LogMessage("USB timing", "decode " & swPhase.ElapsedMilliseconds & " ms")
-                If Not String.IsNullOrEmpty(TiffFileName) AndAlso IO.File.Exists(TiffFileName) Then
+                If HaveDecodedFrame() Then
                     cameraImageReady = True
                     CurrentState = CameraStates.cameraIdle
                     TL.LogMessage("USB capture", "image ready: " & res.Data.Length & " bytes decoded from memory")
@@ -1764,31 +1786,8 @@ Public Class Camera
                                        "lumix-" & Guid.NewGuid().ToString("N") & ".tif")
         Try
             If isRaw Then
-                ' LibRaw does NOT copy the buffer, so it has to stay put until unpack()
-                ' has read it - pin for the whole open/unpack/process sequence.
-                Dim pin As GCHandle = GCHandle.Alloc(data, GCHandleType.Pinned)
-                Try
-                    Dim h As IntPtr
-                    If IntPtr.Size = 8 Then
-                        h = libraw_init64(1)
-                        libraw_open_buffer64(h, pin.AddrOfPinnedObject(), New IntPtr(data.Length))
-                        libraw_unpack64(h)
-                        libraw_set_output_tif64(h, 1)
-                        libraw_dcraw_process64(h)
-                        libraw_dcraw_ppm_tiff_writer64(h, TiffFileName)
-                        libraw_close64(h)
-                    Else
-                        h = libraw_init32(1)
-                        libraw_open_buffer32(h, pin.AddrOfPinnedObject(), New IntPtr(data.Length))
-                        libraw_unpack32(h)
-                        libraw_set_output_tif32(h, 1)
-                        libraw_dcraw_process32(h)
-                        libraw_dcraw_ppm_tiff_writer32(h, TiffFileName)
-                        libraw_close32(h)
-                    End If
-                Finally
-                    pin.Free()
-                End Try
+                DecodeRawBuffer(data)
+                Return
             Else
                 ' Image.FromStream keeps using the stream for the life of the Image, so the
                 ' save has to happen before it is disposed.
@@ -1803,34 +1802,115 @@ Public Class Camera
         End Try
     End Sub
 
-    ''' <summary>Convert a captured RW2/JPG file to the TIFF the ImageArray path reads.</summary>
+    ' The decoded frame, held as 8-bit BGR exactly as TiffBitmapDecoder used to hand it
+    ' over, so the ImageArray pixel loops are unchanged. Non-Nothing means ImageArray
+    ' should use this instead of opening a TIFF.
+    Private _rgbPixels As Byte()
+    Private _rgbW As Integer
+    Private _rgbH As Integer
+    Private _rgbStride As Integer
+
+    ''' <summary>True once a frame is decoded, whether it came back in memory or as a TIFF.</summary>
+    Private Function HaveDecodedFrame() As Boolean
+        If _rgbPixels IsNot Nothing Then Return True
+        Return Not String.IsNullOrEmpty(TiffFileName) AndAlso IO.File.Exists(TiffFileName)
+    End Function
+
+    ''' <summary>
+    ''' Decode a RAW buffer to pixels without any file at all: libraw_open_buffer in,
+    ''' libraw_dcraw_make_mem_image out. The old route wrote a ~31 MB TIFF and had WPF
+    ''' read it straight back - measured at 303 ms to write plus 1450 ms to decode, all of
+    ''' it avoidable.
+    '''
+    ''' One deliberate behaviour change: WPF applied the sRGB ICC profile LibRaw embeds in
+    ''' that TIFF, so the values handed to the imaging software were colour-managed for a
+    ''' display. make_mem_image returns the processed values directly. For astrophotography
+    ''' that is the more faithful choice - a display transform has no business being baked
+    ''' into measurement data - but it does mean pixel values differ from earlier releases.
+    ''' </summary>
+    Private Sub DecodeRawBuffer(data As Byte())
+        _rgbPixels = Nothing
+        ' LibRaw does NOT copy the buffer, so it has to stay put until unpack() has read
+        ' it - pin for the whole open/unpack/process sequence.
+        Dim pin As GCHandle = GCHandle.Alloc(data, GCHandleType.Pinned)
+        Dim h As IntPtr = IntPtr.Zero
+        Dim img As IntPtr = IntPtr.Zero
+        Try
+            Dim is64 As Boolean = (IntPtr.Size = 8)
+            Dim rc As Integer = 0
+            If is64 Then
+                h = libraw_init64(1)
+                libraw_open_buffer64(h, pin.AddrOfPinnedObject(), New IntPtr(data.Length))
+                libraw_unpack64(h)
+                libraw_dcraw_process64(h)
+                img = libraw_dcraw_make_mem_image64(h, rc)
+            Else
+                h = libraw_init32(1)
+                libraw_open_buffer32(h, pin.AddrOfPinnedObject(), New IntPtr(data.Length))
+                libraw_unpack32(h)
+                libraw_dcraw_process32(h)
+                img = libraw_dcraw_make_mem_image32(h, rc)
+            End If
+
+            If img = IntPtr.Zero Then
+                TL.LogMessage("DecodeRawBuffer", "make_mem_image returned nothing (err " & rc & ")")
+                Return
+            End If
+
+            Dim hdr As LibRawProcessedImage = DirectCast(Marshal.PtrToStructure(img, GetType(LibRawProcessedImage)), LibRawProcessedImage)
+            If hdr.colors <> 3 OrElse hdr.bits <> 8 Then
+                TL.LogMessage("DecodeRawBuffer", "unexpected image: colors=" & hdr.colors & " bits=" & hdr.bits)
+                Return
+            End If
+
+            Dim raw(CInt(hdr.data_size) - 1) As Byte
+            Marshal.Copy(img + Marshal.SizeOf(GetType(LibRawProcessedImage)), raw, 0, raw.Length)
+
+            ' make_mem_image gives RGB; the pixel loops below expect the BGR that WPF
+            ' produced from the TIFF (they read index+2 as red). Swap in place rather than
+            ' touching the loops - verified against the old path byte for byte.
+            For i As Integer = 0 To raw.Length - 3 Step 3
+                Dim t As Byte = raw(i)
+                raw(i) = raw(i + 2)
+                raw(i + 2) = t
+            Next
+
+            _rgbPixels = raw
+            _rgbW = hdr.width
+            _rgbH = hdr.height
+            _rgbStride = hdr.width * 3
+            TL.LogMessage("DecodeRawBuffer", _rgbW & "x" & _rgbH & " decoded in memory, no TIFF written")
+        Catch ex As Exception
+            _rgbPixels = Nothing
+            TL.LogMessage("DecodeRawBuffer", "failed: " & ex.Message)
+        Finally
+            If img <> IntPtr.Zero Then
+                If IntPtr.Size = 8 Then libraw_dcraw_clear_mem64(img) Else libraw_dcraw_clear_mem32(img)
+            End If
+            If h <> IntPtr.Zero Then
+                If IntPtr.Size = 8 Then libraw_close64(h) Else libraw_close32(h)
+            End If
+            pin.Free()
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' Convert a captured RW2/JPG file (the WiFi path downloads to disk) into pixels.
+    ''' RAW is read into memory and decoded there, same as USB, so no TIFF is produced.
+    ''' </summary>
     Private Sub ConvertToTiff(imagepath As String, isRaw As Boolean)
         TiffFileName = imagepath.Substring(0, imagepath.Length - 3) & "tif"
         Try
             If isRaw Then
-                Dim h As IntPtr
-                If IntPtr.Size = 8 Then
-                    h = libraw_init64(1)
-                    libraw_open_file64(h, imagepath)
-                    libraw_unpack64(h)
-                    libraw_set_output_tif64(h, 1)
-                    libraw_dcraw_process64(h)
-                    libraw_dcraw_ppm_tiff_writer64(h, TiffFileName)
-                    libraw_close64(h)
-                Else
-                    h = libraw_init32(1)
-                    libraw_open_file32(h, imagepath)
-                    libraw_unpack32(h)
-                    libraw_set_output_tif32(h, 1)
-                    libraw_dcraw_process32(h)
-                    libraw_dcraw_ppm_tiff_writer32(h, TiffFileName)
-                    libraw_close32(h)
-                End If
-            Else
-                Dim jpg = Image.FromFile(imagepath)
-                jpg.Save(TiffFileName, System.Drawing.Imaging.ImageFormat.Tiff)
-                jpg.Dispose()
+                DecodeRawBuffer(IO.File.ReadAllBytes(imagepath))
+                Try : My.Computer.FileSystem.DeleteFile(imagepath) : Catch : End Try
+                Return
             End If
+            ' JPG/Thumb still round-trips through a TIFF: the .NET decoder is already fast
+            ' on a file this size, and there is no LibRaw involved to hand back a buffer.
+            Dim jpg = Image.FromFile(imagepath)
+            jpg.Save(TiffFileName, System.Drawing.Imaging.ImageFormat.Tiff)
+            jpg.Dispose()
             Try : My.Computer.FileSystem.DeleteFile(imagepath) : Catch : End Try
         Catch ex As Exception
             TL.LogMessage("ConvertToTiff", "failed: " & ex.Message)
@@ -1850,6 +1930,7 @@ Public Class Camera
         ' TIFF rather than returning the cached one.
         cameraImageArray = Nothing
         cameraImageArrayVariant = Nothing
+        _rgbPixels = Nothing
         cameraLastExposureDuration = Duration
         exposureStart = DateTime.Now
         If My.Settings.ConnectionMode.StartsWith("USB") Then
@@ -1936,6 +2017,39 @@ Public Class Camera
     <DllImport("libraw32.dll", EntryPoint:="libraw_open_buffer", CallingConvention:=CallingConvention.Cdecl)>
     Public Shared Function libraw_open_buffer32(ByVal libraw_data As IntPtr, ByVal buffer As IntPtr, ByVal size As IntPtr) As <MarshalAs(UnmanagedType.U4)> Int32
     End Function
+
+    ''' <summary>
+    ''' LibRaw's processed-image header, as returned by libraw_dcraw_make_mem_image. The
+    ''' pixel data follows immediately after it. This is the one LibRaw structure the
+    ''' driver marshals, and it is the stable one - four ushorts and two ints, unchanged
+    ''' since 0.14. libraw_data_t, which does churn between versions, is still never
+    ''' touched, so replacing libraw.dll in place remains safe.
+    ''' </summary>
+    <StructLayout(LayoutKind.Sequential)>
+    Private Structure LibRawProcessedImage
+        Public type As Integer          ' LibRaw_image_formats: 1 = JPEG, 2 = BITMAP
+        Public height As UShort
+        Public width As UShort
+        Public colors As UShort
+        Public bits As UShort
+        Public data_size As UInteger
+    End Structure
+
+    <DllImport("libraw.dll", EntryPoint:="libraw_dcraw_make_mem_image", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Function libraw_dcraw_make_mem_image64(ByVal libraw_data As IntPtr, ByRef errcode As Integer) As IntPtr
+    End Function
+
+    <DllImport("libraw32.dll", EntryPoint:="libraw_dcraw_make_mem_image", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Function libraw_dcraw_make_mem_image32(ByVal libraw_data As IntPtr, ByRef errcode As Integer) As IntPtr
+    End Function
+
+    <DllImport("libraw.dll", EntryPoint:="libraw_dcraw_clear_mem", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Sub libraw_dcraw_clear_mem64(ByVal img As IntPtr)
+    End Sub
+
+    <DllImport("libraw32.dll", EntryPoint:="libraw_dcraw_clear_mem", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Sub libraw_dcraw_clear_mem32(ByVal img As IntPtr)
+    End Sub
 
     <DllImport("libraw.dll", EntryPoint:="libraw_init", ThrowOnUnmappableChar:=False, CallingConvention:=CallingConvention.Cdecl)>
     Public Shared Function libraw_init64(ByVal flag As Integer) As <MarshalAs(UnmanagedType.SysUInt)> IntPtr
@@ -2037,6 +2151,10 @@ Public Class Camera
                 LookupImgtag = "CAM_LRGTN"
         End Select
         Try
+            ' Phase timings for the WiFi readout, mirroring the USB path - the gap between
+            ' the shutter closing and the first byte arriving used to be ~3 s of unexplained
+            ' HTTP chatter.
+            Dim swWifi As System.Diagnostics.Stopwatch = System.Diagnostics.Stopwatch.StartNew()
             Do
                 temp = SendLumixMessage(PLAYMODE)   'making sure the camera is in Playmode
                 If temp.Contains("err") Then
@@ -2044,8 +2162,15 @@ Public Class Camera
                 End If
                 tries -= 1
             Loop While (tries > 0 And temp.Contains("err"))
+            TL.LogMessage("WiFi timing", "playmode " & swWifi.ElapsedMilliseconds & " ms")
+            swWifi.Restart()
 
-            PictureString = GetPix(1)
+            ' The loop above has just put the camera in playmode, so GetPix must not send
+            ' it a second time - every one of these is a full HTTP round-trip to a camera
+            ' on the far end of a wireless link.
+            PictureString = GetPix(1, ensurePlaymode:=False)
+            TL.LogMessage("WiFi timing", "content browse " & swWifi.ElapsedMilliseconds & " ms")
+            swWifi.Restart()
             ' Value comparison, not reference: 'IsNot ""' compares references and is
             ' therefore always True, so GetPix's documented "" failure return sailed
             ' through the guard into XElement.Parse("") and surfaced as
@@ -2077,7 +2202,9 @@ Public Class Camera
                 Throw New ASCOM.DriverException
             End If
 
-            SendLumixMessage(PLAYMODE)                'making sure the camera is in Playmode
+            ' No PLAYMODE here: the retry loop above set it and the content browse that
+            ' followed cannot have changed it. This was the third identical round-trip in
+            ' a single readout.
             CurrentState = CameraStates.cameraReading
             CurrentPercentCompleted = 0
 
