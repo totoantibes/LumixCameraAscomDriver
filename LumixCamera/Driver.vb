@@ -508,7 +508,12 @@ Public Class Camera
     ''' a hand-edited profile value does not.
     ''' </summary>
     Private Shared Function NormalisePath(p As String) As String
-        If String.IsNullOrEmpty(p) Then Return p
+        ' An unset temp folder used to be returned as-is, and the download then built its
+        ' filenames as "" & name - a bare relative name, written into whatever the host
+        ' application's working directory happens to be (NINA's install folder, say).
+        ' A fresh profile is exactly this state, and it is reached without the user doing
+        ' anything wrong: connecting without opening the setup dialog first.
+        If String.IsNullOrWhiteSpace(p) Then Return NormalisePath(IO.Path.GetTempPath())
         If p.EndsWith(IO.Path.DirectorySeparatorChar) OrElse p.EndsWith(IO.Path.AltDirectorySeparatorChar) Then Return p
         Return p & IO.Path.DirectorySeparatorChar
     End Function
@@ -1241,6 +1246,13 @@ Public Class Camera
                 TL.LogMessage("ImageArrayVariant Get", "Throwing InvalidOperationException because of a call to ImageArrayVariant before the first image has been taken!")
                 Throw New ASCOM.InvalidOperationException("Call to ImageArrayVariant before the first image has been taken!")
             End If
+            ' Already built for this exposure - hand back the same array, exactly as
+            ' ImageArray does. This used to rebuild ~10 million boxed values on EVERY read,
+            ' so a client that read the variant twice paid the full cost twice.
+            If cameraImageArrayVariant IsNot Nothing Then
+                TL.LogMessage("ImageArrayVariant Get", "returning the variant array already built for this exposure")
+                Return cameraImageArrayVariant
+            End If
             CurrentState = CameraStates.cameraDownload
             ' A client may read the variant without reading ImageArray first; build it
             ' then, rather than dereferencing a Nothing array (which surfaced as a raw
@@ -1248,13 +1260,18 @@ Public Class Camera
             If cameraImageArray Is Nothing Then
                 Dim ignored As Object = Me.ImageArray
             End If
+
+            ' Array.Copy does the Integer -> Object boxing element by element in native
+            ' code. The nested VB loop this replaces did the same work with two bounds
+            ' checks and a 2-D index computation per pixel, and on a 10.2 MPix frame it
+            ' took ~15 s - past the 10 s ConformU allows for ImageArrayVariant, which
+            ' failed validation and aborted the rest of the run.
+            Dim sw As System.Diagnostics.Stopwatch = System.Diagnostics.Stopwatch.StartNew()
             ReDim cameraImageArrayVariant(cameraNumX - 1, cameraNumY - 1)
-            For i As Integer = 0 To cameraNumY - 1
-                For j As Integer = 0 To cameraNumX - 1
-                    cameraImageArrayVariant(j, i) = cameraImageArray(j, i)
-                Next
-            Next
-            TL.LogMessage("ImageArray Variant Get", "getting the Array Variant")
+            Array.Copy(cameraImageArray, cameraImageArrayVariant, cameraImageArray.Length)
+            sw.Stop()
+            TL.LogMessage("ImageArrayVariant Get",
+                          "built " & cameraNumX & "x" & cameraNumY & " variant array in " & sw.ElapsedMilliseconds & " ms")
             CurrentState = CameraStates.cameraIdle
             Return cameraImageArrayVariant
         End Get
