@@ -10,9 +10,16 @@ This driver presents Lumix cameras as ASCOM cameras so they can be used by astro
 See [Connection modes](#connection-modes) for what each one supports.
 
 The driver was tested with the G80, GH4 and GH5s but should work with all Wifi Lumix.
+
+**Your camera needs one of the two transports.** Either built-in Wi-Fi with "Remote Shooting"
+(the ImageApp protocol), or USB tethering the Panasonic SDK recognises. Bodies that predate
+both - the 2009 **GH1** is the usual example - cannot be driven at all: no Wi-Fi to connect to,
+and LUMIX Tether does not support them either. A sensor size appearing in the table below only
+means the driver knows that body's geometry; it does not imply the body can be reached.
+
 16MP sensor was the prototype. Now it is possible to work with a range of sensor sizes such as:  
  * 10M (GH5s)
- * 12MP(GH1)
+ * 12MP (GH1 - geometry only, see the note above)
  * 16MP (GH4, G80, etc.)
  * 20MP (GH5, G9, etc.)
  * Full Frame also like S1 and S1-R (but this hase not been tested)
