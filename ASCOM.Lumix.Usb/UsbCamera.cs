@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
 
@@ -17,6 +18,11 @@ namespace ASCOM.Lumix.Usb
         public uint Format;        // NativeMethods.OBJ_FORMAT_* (1=JPEG, 2=RAW)
         public byte[] Data;        // the encoded RW2/JPEG bytes exactly as the camera sent them
         public string Error;
+
+        // Phase timings, so a slow frame can be attributed rather than guessed at.
+        public long MsSetup;       // putting the body into BULB (bulb captures only)
+        public long MsExpose;      // shutter open
+        public long MsTransfer;    // shutter close -> whole object in memory
     }
 
     /// <summary>
@@ -187,7 +193,13 @@ namespace ASCOM.Lumix.Usb
                 uint err;
                 if (NativeMethods.Rec_Ctrl_Release(ref rc, out err) == 0)
                     return new CaptureResult { Success = false, Error = $"Rec_Ctrl_Release failed (err 0x{err:X8})." };
-                return AwaitObject(timeoutMs);
+                // One-shot has no BULB setup and the shutter time is the body's own, so
+                // everything lands in the transfer figure - shutter open plus delivery.
+                var swXfer = Stopwatch.StartNew();
+                var r = AwaitObject(timeoutMs);
+                swXfer.Stop();
+                if (r != null) r.MsTransfer = swXfer.ElapsedMilliseconds;
+                return r;
             }
         }
 
@@ -202,7 +214,10 @@ namespace ASCOM.Lumix.Usb
             lock (_opGate)   // Disconnect must not close the session under this
             {
                 BeginCapture();
-                if (!EnsureBulb()) return new CaptureResult { Success = false, Error = "Could not put the camera into BULB." };
+                var swSetup = Stopwatch.StartNew();
+                bool bulbOk = EnsureBulb();
+                swSetup.Stop();
+                if (!bulbOk) return new CaptureResult { Success = false, Error = "Could not put the camera into BULB." };
 
                 uint err;
                 var open = MakeRecCtrl(NativeMethods.TAG_BULB_START);
@@ -211,6 +226,7 @@ namespace ASCOM.Lumix.Usb
 
                 // Sleep in slices so an abort ends the exposure promptly instead of
                 // making a client wait out a long bulb before it can disconnect.
+                var swExpose = Stopwatch.StartNew();
                 var until = DateTime.UtcNow.AddSeconds(Math.Max(0, seconds));
                 while (!_abortRequested && DateTime.UtcNow < until)
                     Thread.Sleep(Math.Min(200, Math.Max(1, (int)(until - DateTime.UtcNow).TotalMilliseconds)));
@@ -219,14 +235,35 @@ namespace ASCOM.Lumix.Usb
                 NativeMethods.Rec_Ctrl_Release(ref stop, out err);
                 var fin = MakeRecCtrl(NativeMethods.TAG_BULB_FINALIZE);
                 NativeMethods.Rec_Ctrl_Release(ref fin, out err);
+                swExpose.Stop();
                 if (_abortRequested) return new CaptureResult { Success = false, Error = "Aborted." };
-                return AwaitObject(timeoutMs);
+                var swXfer = Stopwatch.StartNew();
+                var r = AwaitObject(timeoutMs);
+                swXfer.Stop();
+                if (r != null)
+                {
+                    r.MsSetup = swSetup.ElapsedMilliseconds;
+                    r.MsExpose = swExpose.ElapsedMilliseconds;
+                    r.MsTransfer = swXfer.ElapsedMilliseconds;
+                }
+                return r;
             }
         }
 
         // Refresh the SS range so BULB (0xFFFFFFFF) sticks instead of clamping to 60 s.
         private bool EnsureBulb()
         {
+            // Ask first. The body keeps BULB between exposures, so on every frame after
+            // the first this is already true - and the loop below unconditionally slept
+            // 250 ms + 150 ms before it ever checked, making a settled camera pay 400 ms
+            // of pure waiting on each and every bulb exposure.
+            {
+                uint e0;
+                int already;
+                if (NativeMethods.SS_Get_Param(out already, out e0) != 0 && (uint)already == NativeMethods.SS_BULB)
+                    return true;
+            }
+
             for (int attempt = 0; attempt < 5; attempt++)
             {
                 uint e;

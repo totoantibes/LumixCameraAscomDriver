@@ -1714,7 +1714,9 @@ Public Class Camera
             End If
             If res IsNot Nothing AndAlso res.Success Then
                 Dim msCapture As Long = swPhase.ElapsedMilliseconds
-                TL.LogMessage("USB timing", "shutter+SDK transfer " & msCapture & " ms (" & res.Data.Length & " bytes)")
+                TL.LogMessage("USB timing", "total " & msCapture & " ms = setup " & res.MsSetup &
+                              " + expose " & res.MsExpose & " + transfer " & res.MsTransfer &
+                              " ms (" & res.Data.Length & " bytes)")
                 swPhase.Restart()
                 ConvertToTiffFromBuffer(res.Data, res.Format <> 1) ' format 1 = JPEG, otherwise RAW
                 TL.LogMessage("USB timing", "decode " & swPhase.ElapsedMilliseconds & " ms")
