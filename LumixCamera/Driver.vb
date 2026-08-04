@@ -1501,9 +1501,13 @@ Public Class Camera
     End Property
 
     ' The camera reports err_busy on get_content_info until it has finished writing the
-    ' frame; ~20s is comfortably longer than a RAW commit observed on a GH5S over WiFi.
-    Private Const CONTENT_READY_WAIT_MS As Integer = 500
-    Private Const CONTENT_READY_RETRIES As Integer = 40
+    ' frame. The total budget stays ~20s - comfortably longer than a RAW commit observed
+    ' on a GH5S over WiFi - but polled at 150ms rather than 500ms: the wait ends whenever
+    ' the camera is ready, so a coarse interval just adds up to 500ms of pure idling to
+    ' every exposure. This sits directly between the shutter closing and the download
+    ' starting, so it is dead time on every single frame.
+    Private Const CONTENT_READY_WAIT_MS As Integer = 150
+    Private Const CONTENT_READY_RETRIES As Integer = 130
 
     Private Function NumberPix() As String
         Dim response As String = SendLumixMessage(NUMPIX)
@@ -1692,6 +1696,10 @@ Public Class Camera
     ''' <summary>Background worker: one-shot USB capture -> file -> TIFF -> ImageReady.</summary>
     Private Sub UsbCaptureWorker()
         Try
+            ' Phase timings. Without these the only thing the log shows is "bulb 2s" and,
+            ' fifteen seconds later, "image ready" - which says nothing about whether the
+            ' time went on the camera, the SDK transfer or the decode.
+            Dim swPhase As System.Diagnostics.Stopwatch = System.Diagnostics.Stopwatch.StartNew()
             Dim dur As Double = cameraLastExposureDuration
             Dim res As ASCOM.Lumix.Usb.CaptureResult
             If UsbTransport.IsExtended AndAlso dur > 1.0 Then
@@ -1705,7 +1713,11 @@ Public Class Camera
                 res = UsbTransport.Capture(90000)
             End If
             If res IsNot Nothing AndAlso res.Success Then
+                Dim msCapture As Long = swPhase.ElapsedMilliseconds
+                TL.LogMessage("USB timing", "shutter+SDK transfer " & msCapture & " ms (" & res.Data.Length & " bytes)")
+                swPhase.Restart()
                 ConvertToTiffFromBuffer(res.Data, res.Format <> 1) ' format 1 = JPEG, otherwise RAW
+                TL.LogMessage("USB timing", "decode " & swPhase.ElapsedMilliseconds & " ms")
                 If Not String.IsNullOrEmpty(TiffFileName) AndAlso IO.File.Exists(TiffFileName) Then
                     cameraImageReady = True
                     CurrentState = CameraStates.cameraIdle
@@ -1998,7 +2010,10 @@ Public Class Camera
         Dim nRead As Integer
         Dim SendStatus As Integer = -1
         Dim length As Integer = 0
-        Dim buflen As Integer = 1024
+        ' 64 KB, not 1 KB. At 1 KB an 18.7 MB RAW took ~18,300 trips round the read loop,
+        ' each allocating a fresh buffer, taking a timestamp and - worst of all - calling
+        ' Flush() on the file stream, i.e. one forced disk write per kilobyte.
+        Dim buflen As Integer = 65536
 
         cameraImageReady = False
         If cameraAborted Then ' aborted during the exposure wait - don't download
@@ -2102,18 +2117,25 @@ Public Class Camera
 
                 TL.LogMessage("opening or creating  file", Images)
                 Try
+                    ' Allocate once and hold the stream in a local. The old loop built a
+                    ' new buffer and re-read the GetResponseStream property on every
+                    ' iteration; at 64 KB that is 286 trips for an 18.7 MB RAW instead of
+                    ' 18,300, and the buffer no longer churns the heap.
+                    Dim readBytes(buflen - 1) As Byte
+                    Dim src As IO.Stream = theResponse.GetResponseStream()
                     Do
-                        Dim readBytes(buflen - 1) As Byte
                         CurrentPercentCompleted = Math.Min(nRead \ 80000, 100) 'assuming a jpg is not longer than 8MB (nRead\80000 avoids the Int32 overflow of 100*nRead on >21MB RAW)
-                        bytesread = theResponse.GetResponseStream.Read(readBytes, 0, buflen)
+                        bytesread = src.Read(readBytes, 0, buflen)
 
                         nRead = nRead + bytesread
                         If bytesread = 0 Then
                             TL.LogMessage("reached end of stream ", Images & " position " & nRead)
                             Exit Do
                         End If
+                        ' No Flush() here. FileStream buffers for exactly this reason, and
+                        ' flushing per chunk forced a disk write per kilobyte; the stream
+                        ' is flushed and closed below, which is what actually matters.
                         writeStream.Write(readBytes, 0, bytesread)
-                        writeStream.Flush()
                         stop_time = Now
                         elapsed_time = stop_time.Subtract(start_time)
                         If elapsed_time.TotalSeconds > 30 Then
@@ -2121,7 +2143,7 @@ Public Class Camera
                         End If
 
                     Loop
-                    theResponse.GetResponseStream.Close()
+                    src.Close()
                     writeStream.Flush()
                     writeStream.Close()
                     stop_time = Now
@@ -2132,7 +2154,12 @@ Public Class Camera
 
                 Catch e As System.IO.IOException
                     TL.LogMessage("camera stopped streaming  ", Images & " position  " & nRead)
-                    nRead -= 8 * buflen
+                    ' Back up a little and resume via AddRange. Fixed at 8 KB rather than
+                    ' 8 * buflen: that expression was written when buflen was 1 KB, and
+                    ' scaling it with the buffer would now discard half a megabyte of a
+                    ' download that was already struggling.
+                    nRead -= 8192
+                    If nRead < 0 Then nRead = 0
                     theResponse.GetResponseStream.Close()
                     writeStream.Flush()
                     writeStream.Close()
