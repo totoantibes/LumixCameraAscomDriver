@@ -547,6 +547,7 @@ Public Class Camera
                 End If
                 TempPath = NormalisePath(My.Settings.TempPath)
                 CurrentSpeed = My.Settings.Speed
+                LogLibRawVersion()
                 ' Resolve and clamp BEFORE assigning: TransferFormat can be unset or stale,
                 ' and IndexOf then returns -1. Assigning that to the property first and
                 ' checking afterwards pushes -1 through the setter, which indexes ROM()
@@ -1640,7 +1641,10 @@ Public Class Camera
         Try
             UsbTransport.Connect(My.Settings.ConnectionMode = "USBExtended")
             MODEL = UsbTransport.ModelName
-            TempPath = My.Settings.TempPath
+            ' No TempPath over USB: the frame is decoded from memory and the only file
+            ' produced is our own TIFF, which goes to the system temp area. The setup
+            ' dialog's temp folder applies to the WiFi download path only.
+            LogLibRawVersion()
             Dim w As Integer, h As Integer, p As Double
             UsbTransport.GetSpecs(MODEL, w, h, p)
             ccdWidth = w : ccdHeight = h
@@ -1676,19 +1680,19 @@ Public Class Camera
             If UsbTransport.IsExtended AndAlso dur > 1.0 Then
                 ' Extended mode: hold the shutter open for the exact time (bulb), any duration incl. >60s.
                 TL.LogMessage("USB capture", "bulb " & dur & "s")
-                res = UsbTransport.CaptureBulb(TempPath, dur, CInt(dur * 1000) + 120000)
+                res = UsbTransport.CaptureBulb(dur, CInt(dur * 1000) + 120000)
             Else
                 ' Snap to the nearest supported discrete shutter speed and fire a one-shot.
                 Dim actual As Double = UsbTransport.SetShutterSeconds(dur)
                 TL.LogMessage("USB capture", "requested " & dur & "s -> nearest " & actual & "s")
-                res = UsbTransport.Capture(TempPath, 90000)
+                res = UsbTransport.Capture(90000)
             End If
             If res IsNot Nothing AndAlso res.Success Then
-                ConvertToTiff(res.FilePath, res.Format <> 1) ' format 1 = JPEG, otherwise RAW
+                ConvertToTiffFromBuffer(res.Data, res.Format <> 1) ' format 1 = JPEG, otherwise RAW
                 If Not String.IsNullOrEmpty(TiffFileName) AndAlso IO.File.Exists(TiffFileName) Then
                     cameraImageReady = True
                     CurrentState = CameraStates.cameraIdle
-                    TL.LogMessage("USB capture", "image ready: " & res.FilePath)
+                    TL.LogMessage("USB capture", "image ready: " & res.Data.Length & " bytes decoded from memory")
                 Else
                     CurrentState = CameraStates.cameraError
                     TL.LogMessage("USB capture", "conversion produced no TIFF")
@@ -1705,6 +1709,66 @@ Public Class Camera
         Catch ex As Exception
             CurrentState = CameraStates.cameraError
             TL.LogMessage("USB capture exception", ex.Message)
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' Convert a captured frame held in memory to the TIFF the ImageArray path reads.
+    ''' Used by the USB path, where the SDK hands the whole object back as a byte array:
+    ''' LibRaw decodes it with libraw_open_buffer and System.Drawing decodes a JPEG from a
+    ''' MemoryStream, so the capture never touches the disk. That removes a ~24 MB write
+    ''' plus read per RAW frame, the temp folder setting, and the fixed "usbcap" filename
+    ''' two concurrent captures used to collide on.
+    ''' </summary>
+    Private Sub ConvertToTiffFromBuffer(data As Byte(), isRaw As Boolean)
+        If data Is Nothing OrElse data.Length = 0 Then
+            TL.LogMessage("ConvertToTiff", "empty capture buffer")
+            Return
+        End If
+
+        ' The TIFF still goes to disk - ImageArray decodes it with TiffBitmapDecoder - but
+        ' it is ours alone, so it lives in the system temp area under a unique name rather
+        ' than in a user-configured folder.
+        TiffFileName = IO.Path.Combine(IO.Path.GetTempPath(),
+                                       "lumix-" & Guid.NewGuid().ToString("N") & ".tif")
+        Try
+            If isRaw Then
+                ' LibRaw does NOT copy the buffer, so it has to stay put until unpack()
+                ' has read it - pin for the whole open/unpack/process sequence.
+                Dim pin As GCHandle = GCHandle.Alloc(data, GCHandleType.Pinned)
+                Try
+                    Dim h As IntPtr
+                    If IntPtr.Size = 8 Then
+                        h = libraw_init64(1)
+                        libraw_open_buffer64(h, pin.AddrOfPinnedObject(), New IntPtr(data.Length))
+                        libraw_unpack64(h)
+                        libraw_set_output_tif64(h, 1)
+                        libraw_dcraw_process64(h)
+                        libraw_dcraw_ppm_tiff_writer64(h, TiffFileName)
+                        libraw_close64(h)
+                    Else
+                        h = libraw_init32(1)
+                        libraw_open_buffer32(h, pin.AddrOfPinnedObject(), New IntPtr(data.Length))
+                        libraw_unpack32(h)
+                        libraw_set_output_tif32(h, 1)
+                        libraw_dcraw_process32(h)
+                        libraw_dcraw_ppm_tiff_writer32(h, TiffFileName)
+                        libraw_close32(h)
+                    End If
+                Finally
+                    pin.Free()
+                End Try
+            Else
+                ' Image.FromStream keeps using the stream for the life of the Image, so the
+                ' save has to happen before it is disposed.
+                Using ms As New IO.MemoryStream(data, writable:=False)
+                    Using jpg = Image.FromStream(ms)
+                        jpg.Save(TiffFileName, System.Drawing.Imaging.ImageFormat.Tiff)
+                    End Using
+                End Using
+            End If
+        Catch ex As Exception
+            TL.LogMessage("ConvertToTiff", "failed: " & ex.Message)
         End Try
     End Sub
 
@@ -1800,6 +1864,46 @@ Public Class Camera
         CurrentState = CameraStates.cameraReading
         ' System.Threading.Thread.Sleep(1000) ' Sleep for 1s after the capture so the camera can breath a bit.
         Return True
+    End Function
+
+    ''' <summary>
+    ''' Record which LibRaw actually got loaded. The DLL carries no version resource, so
+    ''' without this a "my RAW will not decode" report cannot be answered without the user
+    ''' hashing the file - and the DLL is deliberately replaceable in place (the driver
+    ''' only calls the flat C API through opaque handles and marshals no LibRaw struct, so
+    ''' dropping in a newer build is safe).
+    ''' </summary>
+    ' Per instance, not per process: each connection writes its own trace file, and the
+    ' whole point is that the file answers "which LibRaw decoded this?" on its own.
+    Private _librawLogged As Boolean
+    Private Sub LogLibRawVersion()
+        If _librawLogged Then Return
+        _librawLogged = True
+        Try
+            Dim p As IntPtr = If(IntPtr.Size = 8, libraw_version64(), libraw_version32())
+            TL.LogMessage("LibRaw", If(p = IntPtr.Zero, "version unavailable", Marshal.PtrToStringAnsi(p)))
+        Catch ex As Exception
+            TL.LogMessage("LibRaw", "version query failed: " & ex.Message)
+        End Try
+    End Sub
+
+    <DllImport("libraw.dll", EntryPoint:="libraw_version", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Function libraw_version64() As IntPtr
+    End Function
+
+    <DllImport("libraw32.dll", EntryPoint:="libraw_version", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Function libraw_version32() As IntPtr
+    End Function
+
+    ' Decode straight from the capture buffer instead of a file. Present since 0.19, so it
+    ' works with both the shipped 64-bit LibRaw and the older 32-bit one. The size argument
+    ' is size_t, hence IntPtr rather than Integer.
+    <DllImport("libraw.dll", EntryPoint:="libraw_open_buffer", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Function libraw_open_buffer64(ByVal libraw_data As IntPtr, ByVal buffer As IntPtr, ByVal size As IntPtr) As <MarshalAs(UnmanagedType.U4)> Int32
+    End Function
+
+    <DllImport("libraw32.dll", EntryPoint:="libraw_open_buffer", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Function libraw_open_buffer32(ByVal libraw_data As IntPtr, ByVal buffer As IntPtr, ByVal size As IntPtr) As <MarshalAs(UnmanagedType.U4)> Int32
     End Function
 
     <DllImport("libraw.dll", EntryPoint:="libraw_init", ThrowOnUnmappableChar:=False, CallingConvention:=CallingConvention.Cdecl)>

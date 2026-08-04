@@ -10,7 +10,7 @@
 ; is x64 only. See the 32-bit script for what that build can and cannot do.
 ;
 
-#define AppVer "8.0.0"
+#define AppVer "8.0.1"
 ; Paths are relative to this .iss file so the script builds on any machine.
 #define RepoRoot AddBackslash(SourcePath) + "..\"
 #define BinDir   AddBackslash(SourcePath) + "bin\x64\Release\"
@@ -49,20 +49,31 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "{cf}\ASCOM\Uninstall\Camera\ASCOM.Lumix.Camera"
 Name: "{app}\native\x64"
 
+; ignoreversion on everything we ship. Without it Setup decides per file whether to copy
+; by comparing version resources, and only the driver assembly has one that moves:
+;   - libraw.dll / libraw32.dll / Lmxptpif.dll carry no version resource at all;
+;   - ASCOM.Lumix.Usb.dll is stamped 1.0.0.0 and never changes, so NO upgrade has ever
+;     replaced it - an installed driver could run against a USB binding from a different
+;     release entirely, which surfaces as a MissingFieldException at the first capture.
+; These are all app-private files in our own folder; the shipped build is always the one
+; we want on disk.
 [Files]
-Source: "{#BinDir}ASCOM.Lumix.Camera.dll"; DestDir: "{app}"
+Source: "{#BinDir}ASCOM.Lumix.Camera.dll"; DestDir: "{app}"; Flags: ignoreversion
 ; USB transport: the managed SDK binding plus the bundled public Lumix SDK. Without
 ; both of these the driver still runs but every USB mode fails to connect.
-Source: "{#BinDir}ASCOM.Lumix.Usb.dll"; DestDir: "{app}"
-Source: "{#BinDir}native\x64\Lmxptpif.dll"; DestDir: "{app}\native\x64"
-; Editable camera/resolution table (the driver falls back to an embedded copy if absent)
-Source: "{#BinDir}cameras.json"; DestDir: "{app}"
+Source: "{#BinDir}ASCOM.Lumix.Usb.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#BinDir}native\x64\Lmxptpif.dll"; DestDir: "{app}\native\x64"; Flags: ignoreversion
+; Editable camera/resolution table. onlyifdoesntexist on purpose: the README tells users
+; to add their body here, and an upgrade must not throw those edits away. To pick up a
+; newer shipped table, delete the file and re-run Setup - the driver also carries an
+; embedded copy, so it still works if it is missing.
+Source: "{#BinDir}cameras.json"; DestDir: "{app}"; Flags: onlyifdoesntexist
 ; RAW decoding
-Source: "{#BinDir}libraw.dll"; DestDir: "{app}"
-Source: "{#BinDir}libraw32.dll"; DestDir: "{app}"
+Source: "{#BinDir}libraw.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#BinDir}libraw32.dll"; DestDir: "{app}"; Flags: ignoreversion
 ; Read-me shown after installation
-Source: "{#RepoRoot}README.md"; DestDir: "{app}"; Flags: isreadme
-Source: "{#RepoRoot}readme_files\*"; DestDir: "{app}\readme_files\"
+Source: "{#RepoRoot}README.md"; DestDir: "{app}"; Flags: isreadme ignoreversion
+Source: "{#RepoRoot}readme_files\*"; DestDir: "{app}\readme_files\"; Flags: ignoreversion
 
 ; Only for .NET assembly/in-proc drivers.
 ; NOTE: only the driver assembly is registered. libraw/libraw32 are native DLLs -
@@ -114,23 +125,15 @@ var
          MsgBox('ASCOM Platform ' + Format('%3.1f', [REQUIRED_PLATFORM_VERSION]) + ' or later is required, but Platform '+ Format('%3.1f', [PlatformVersionNumber]) + ' is installed. Please install the latest Platform before continuing; you will find it at http://www.ascom-standards.org', mbCriticalError, MB_OK);
 end;
 
-// Code to enable the installer to uninstall previous versions of itself when a new version is installed
-procedure CurStepChanged(CurStep: TSetupStep);
-var
-  ResultCode: Integer;
-  UninstallExe: String;
-  UninstallRegistry: String;
-begin
-  if (CurStep = ssInstall) then // Install step has started
-	begin
-      // Create the correct registry location name, which is based on the AppId
-      UninstallRegistry := ExpandConstant('Software\Microsoft\Windows\CurrentVersion\Uninstall\{#SetupSetting("AppId")}' + '_is1');
-      // Check whether an extry exists
-      if RegQueryStringValue(HKLM, UninstallRegistry, 'UninstallString', UninstallExe) then
-        begin // Entry exists and previous version is installed so run its uninstaller quietly after informing the user
-          MsgBox('Setup will now remove the previous version.', mbInformation, MB_OK);
-          Exec(RemoveQuotes(UninstallExe), ' /SILENT', '', SW_SHOWNORMAL, ewWaitUntilTerminated, ResultCode);
-          sleep(1000);    //Give enough time for the install screen to be repainted before continuing
-        end
-  end;
-end;
+// The ASCOM installer template ran the previous version's uninstaller here before
+// installing. That is what wiped every user setting on each update: the uninstaller's
+// [UninstallRun] calls "regasm -u", which runs the driver's ComUnregisterFunction ->
+// Profile.Unregister(driverID) -> the driver's whole ASCOM Profile subkey is deleted,
+// taking the camera IP, ISO, transfer format and temp folder with it. The fresh install
+// then re-registered an empty profile, so an upgrade looked like a factory reset - and a
+// blank temp folder is exactly the state that used to break the WiFi download path.
+//
+// Removing the step is safe: both installers share one AppID and one target folder, so
+// Setup upgrades in place and overwrites the files anyway (the native DLLs carry no
+// version resource, hence ignoreversion on those entries above). Uninstalling still
+// unregisters properly - only the upgrade path stops destroying the profile.

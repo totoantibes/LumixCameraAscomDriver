@@ -16,7 +16,7 @@
 ; same driver installing to the same folder, so installing one replaces the other.
 ;
 
-#define AppVer "8.0.0"
+#define AppVer "8.0.1"
 ; Paths are relative to this .iss file so the script builds on any machine.
 #define RepoRoot AddBackslash(SourcePath) + "..\"
 #define BinDir   AddBackslash(SourcePath) + "bin\x86\Release\"
@@ -51,19 +51,24 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Dirs]
 Name: "{cf}\ASCOM\Uninstall\Camera\ASCOM.Lumix.Camera"
 
+; ignoreversion on everything we ship - see the 64-bit script for why: only the driver
+; assembly has a version resource that moves, so without it Setup silently keeps the old
+; libraw.dll and the old (permanently 1.0.0.0) ASCOM.Lumix.Usb.dll on every upgrade.
 [Files]
-Source: "{#BinDir}ASCOM.Lumix.Camera.dll"; DestDir: "{app}"
+Source: "{#BinDir}ASCOM.Lumix.Camera.dll"; DestDir: "{app}"; Flags: ignoreversion
 ; Shipped so the assembly loads. With no x86 Lmxptpif.dll beside it the USB modes
 ; report the SDK as missing rather than failing obscurely.
-Source: "{#BinDir}ASCOM.Lumix.Usb.dll"; DestDir: "{app}"
-; Editable camera/resolution table (the driver falls back to an embedded copy if absent)
-Source: "{#BinDir}cameras.json"; DestDir: "{app}"
+Source: "{#BinDir}ASCOM.Lumix.Usb.dll"; DestDir: "{app}"; Flags: ignoreversion
+; Editable camera/resolution table. onlyifdoesntexist on purpose: the README tells users
+; to add their body here and an upgrade must not discard those edits. Delete the file and
+; re-run Setup to take a newer shipped table.
+Source: "{#BinDir}cameras.json"; DestDir: "{app}"; Flags: onlyifdoesntexist
 ; RAW decoding
-Source: "{#BinDir}libraw.dll"; DestDir: "{app}"
-Source: "{#BinDir}libraw32.dll"; DestDir: "{app}"
+Source: "{#BinDir}libraw.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#BinDir}libraw32.dll"; DestDir: "{app}"; Flags: ignoreversion
 ; Read-me shown after installation
-Source: "{#RepoRoot}README.md"; DestDir: "{app}"; Flags: isreadme
-Source: "{#RepoRoot}readme_files\*"; DestDir: "{app}\readme_files\"
+Source: "{#RepoRoot}README.md"; DestDir: "{app}"; Flags: isreadme ignoreversion
+Source: "{#RepoRoot}readme_files\*"; DestDir: "{app}\readme_files\"; Flags: ignoreversion
 
 ; Only for .NET assembly/in-proc drivers.
 ; NOTE: only the driver assembly is registered. libraw/libraw32 are native DLLs -
@@ -115,23 +120,9 @@ var
          MsgBox('ASCOM Platform ' + Format('%3.1f', [REQUIRED_PLATFORM_VERSION]) + ' or later is required, but Platform '+ Format('%3.1f', [PlatformVersionNumber]) + ' is installed. Please install the latest Platform before continuing; you will find it at http://www.ascom-standards.org', mbCriticalError, MB_OK);
 end;
 
-// Code to enable the installer to uninstall previous versions of itself when a new version is installed
-procedure CurStepChanged(CurStep: TSetupStep);
-var
-  ResultCode: Integer;
-  UninstallExe: String;
-  UninstallRegistry: String;
-begin
-  if (CurStep = ssInstall) then // Install step has started
-	begin
-      // Create the correct registry location name, which is based on the AppId
-      UninstallRegistry := ExpandConstant('Software\Microsoft\Windows\CurrentVersion\Uninstall\{#SetupSetting("AppId")}' + '_is1');
-      // Check whether an extry exists
-      if RegQueryStringValue(HKLM, UninstallRegistry, 'UninstallString', UninstallExe) then
-        begin // Entry exists and previous version is installed so run its uninstaller quietly after informing the user
-          MsgBox('Setup will now remove the previous version.', mbInformation, MB_OK);
-          Exec(RemoveQuotes(UninstallExe), ' /SILENT', '', SW_SHOWNORMAL, ewWaitUntilTerminated, ResultCode);
-          sleep(1000);    //Give enough time for the install screen to be repainted before continuing
-        end
-  end;
-end;
+// The ASCOM installer template ran the previous version's uninstaller here before
+// installing, which wiped every user setting on each update: the uninstaller's
+// [UninstallRun] calls "regasm -u" -> Profile.Unregister(driverID) -> the driver's whole
+// ASCOM Profile subkey is deleted, camera IP, ISO, transfer format and temp folder with
+// it. Both installers share one AppID and target folder, so Setup upgrades in place
+// without it. See the 64-bit script for the full note.

@@ -118,6 +118,13 @@ The driver allows to set the speed, iso and format of the camera transfers the i
 It relies on LibRaw to handle the Raw format, or the native VB.NET imaging for JPG
 Images are then translated into Tiff and then passed to the image array.
 
+Over **USB** the frame is decoded **entirely in memory**: the Panasonic SDK hands the whole
+file back as a buffer, which goes straight to LibRaw (`libraw_open_buffer`) or, for JPG, to
+the .NET imaging decoder. Nothing is written to a temp folder, so the **Temp folder setting
+applies to the Wi-Fi download path only** - over USB it is ignored and the one intermediate
+the driver still makes (the TIFF) lives in the system temp area under a unique name and is
+deleted after `ImageArray` is read.
+
 RAW would be preferred but the file is substantially larger and therefore longer to transfer. Therefore the download is often interrupted. the driver tries to recover/continue the download  but it does not always work smoothly. this leaves with an incomplete RAW file that is still passed on but not ideal.
 
 Given the longer transfer time it substantially cuts into the active shooting since all this process is sequential
@@ -128,7 +135,18 @@ In any case the camera keeps the RAW or the RAW+jpg on the SD card and the Astro
 
 I added a "thumb" transfer mode which takes a large thumbnail of the image (1440x1080) in order to further reduce the transfer size. After exptensive tests it seems that platesolving is working well with the Thumb format too as the resolution is changed based on the THumb size and the pixelpitch is changed in the driver so to help in that process.
 
-There used to be an issue with the lastest RW@ 14 bt formats that were not handled by DCraw. This new driver version now relies on LibRaw which is maintained up to date. The latest version of LibRaw.dll is included with the setup and should be installed in the same folder as the driver. I am expecting that just replacing the DLL with a most updated on should fix other RAW format issues that may emeger in the future.
+There used to be an issue with the latest RW2 14-bit formats that DCraw did not handle. The driver uses LibRaw instead, installed next to the driver DLL.
+
+### LibRaw version, and replacing it yourself
+
+| | shipped with the driver |
+|---|---|
+| 64-bit (`libraw.dll`) | **0.22.2** |
+| 32-bit (`libraw32.dll`) | **0.19.5** - libraw.org no longer publishes an official Win32 binary, so the 32-bit build stays on the last one available. Build from source if you need a newer one. |
+
+The driver **logs the LibRaw version it loaded** in its ASCOM trace at connect (`LibRaw  0.22.2-Release`), so a "my RAW will not decode" question can be answered from the log.
+
+**You can drop in a newer LibRaw yourself** - replace `libraw.dll` in the driver's folder. This is safe: the driver only calls LibRaw's flat C API through opaque handles and marshals none of its structs, so there is no layout to break between versions. A newer LibRaw is the usual fix for a recent camera body whose RAW the driver cannot read - newer than the sensor table in `cameras.json`, which only carries geometry.
 
 # Installation
 
@@ -187,6 +205,10 @@ The known-camera and sensor-resolution tables live in **`cameras.json`**, instal
 ```
 
 Each `models` entry maps the camera's reported model string to a `resolutions` `class`. The driver ships an embedded copy as a fallback, so it still works if the file is missing.
+
+**Upgrading does not overwrite this file**, so your additions survive. To take a newer shipped table instead, delete `cameras.json` and re-run the installer.
+
+Note this file only describes sensor **geometry**. If the driver cannot *decode* a recent body's RAW at all, that is LibRaw's table, not this one - see [LibRaw version](#libraw-version-and-replacing-it-yourself).
 
 # License
 Copyright (c) 2019 < robert hasson robert_hasson@yahoo.com>
