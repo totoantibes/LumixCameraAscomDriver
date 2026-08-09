@@ -1526,6 +1526,12 @@ Public Class Camera
     Private Const CONTENT_READY_WAIT_MS As Integer = 150
     Private Const CONTENT_READY_RETRIES As Integer = 130
 
+    ' Same reasoning for the playmode switch that precedes the content browse: the camera
+    ' rejects it while it is still committing the frame, so the loop around it is a
+    ' readiness poll. 250ms x 24 keeps the ~6s ceiling the old 1000ms x 5 gave.
+    Private Const PLAYMODE_WAIT_MS As Integer = 250
+    Private Const PLAYMODE_RETRIES As Integer = 24
+
     Private Function NumberPix() As String
         Dim response As String = SendLumixMessage(NUMPIX)
         ' err_busy / err_param etc: not ready (or refused) - report "not available".
@@ -1773,11 +1779,12 @@ Public Class Camera
     ''' plus read per RAW frame, the temp folder setting, and the fixed "usbcap" filename
     ''' two concurrent captures used to collide on.
     ''' </summary>
-    Private Sub ConvertToTiffFromBuffer(data As Byte(), isRaw As Boolean)
+    Private Sub ConvertToTiffFromBuffer(data As Byte(), isRaw As Boolean, Optional count As Integer = -1)
         If data Is Nothing OrElse data.Length = 0 Then
             TL.LogMessage("ConvertToTiff", "empty capture buffer")
             Return
         End If
+        If count < 0 OrElse count > data.Length Then count = data.Length
 
         ' The TIFF still goes to disk - ImageArray decodes it with TiffBitmapDecoder - but
         ' it is ours alone, so it lives in the system temp area under a unique name rather
@@ -1786,12 +1793,12 @@ Public Class Camera
                                        "lumix-" & Guid.NewGuid().ToString("N") & ".tif")
         Try
             If isRaw Then
-                DecodeRawBuffer(data)
+                DecodeRawBuffer(data, count)
                 Return
             Else
                 ' Image.FromStream keeps using the stream for the life of the Image, so the
                 ' save has to happen before it is disposed.
-                Using ms As New IO.MemoryStream(data, writable:=False)
+                Using ms As New IO.MemoryStream(data, 0, count, writable:=False)
                     Using jpg = Image.FromStream(ms)
                         jpg.Save(TiffFileName, System.Drawing.Imaging.ImageFormat.Tiff)
                     End Using
@@ -1828,7 +1835,13 @@ Public Class Camera
     ''' that is the more faithful choice - a display transform has no business being baked
     ''' into measurement data - but it does mean pixel values differ from earlier releases.
     ''' </summary>
-    Private Sub DecodeRawBuffer(data As Byte())
+    ''' <param name="count">
+    ''' Bytes of <paramref name="data"/> that are actually the frame. The WiFi path hands
+    ''' over the MemoryStream's own backing array, which is larger than the download, so
+    ''' the array length is not the file length. -1 means "all of it".
+    ''' </param>
+    Private Sub DecodeRawBuffer(data As Byte(), Optional count As Integer = -1)
+        If count < 0 OrElse count > data.Length Then count = data.Length
         _rgbPixels = Nothing
         ' LibRaw does NOT copy the buffer, so it has to stay put until unpack() has read
         ' it - pin for the whole open/unpack/process sequence.
@@ -1838,19 +1851,26 @@ Public Class Camera
         Try
             Dim is64 As Boolean = (IntPtr.Size = 8)
             Dim rc As Integer = 0
+            Dim sw As System.Diagnostics.Stopwatch = System.Diagnostics.Stopwatch.StartNew()
+            Dim msUnpack As Long, msProcess As Long, msMem As Long
             If is64 Then
                 h = libraw_init64(1)
-                libraw_open_buffer64(h, pin.AddrOfPinnedObject(), New IntPtr(data.Length))
+                libraw_open_buffer64(h, pin.AddrOfPinnedObject(), New IntPtr(count))
                 libraw_unpack64(h)
+                msUnpack = sw.ElapsedMilliseconds : sw.Restart()
                 libraw_dcraw_process64(h)
+                msProcess = sw.ElapsedMilliseconds : sw.Restart()
                 img = libraw_dcraw_make_mem_image64(h, rc)
             Else
                 h = libraw_init32(1)
-                libraw_open_buffer32(h, pin.AddrOfPinnedObject(), New IntPtr(data.Length))
+                libraw_open_buffer32(h, pin.AddrOfPinnedObject(), New IntPtr(count))
                 libraw_unpack32(h)
+                msUnpack = sw.ElapsedMilliseconds : sw.Restart()
                 libraw_dcraw_process32(h)
+                msProcess = sw.ElapsedMilliseconds : sw.Restart()
                 img = libraw_dcraw_make_mem_image32(h, rc)
             End If
+            msMem = sw.ElapsedMilliseconds : sw.Restart()
 
             If img = IntPtr.Zero Then
                 TL.LogMessage("DecodeRawBuffer", "make_mem_image returned nothing (err " & rc & ")")
@@ -1880,6 +1900,8 @@ Public Class Camera
             _rgbH = hdr.height
             _rgbStride = hdr.width * 3
             TL.LogMessage("DecodeRawBuffer", _rgbW & "x" & _rgbH & " decoded in memory, no TIFF written")
+            TL.LogMessage("DecodeRawBuffer", "unpack " & msUnpack & " + demosaic " & msProcess &
+                          " + make_mem_image " & msMem & " + copy/swap " & sw.ElapsedMilliseconds & " ms")
         Catch ex As Exception
             _rgbPixels = Nothing
             TL.LogMessage("DecodeRawBuffer", "failed: " & ex.Message)
@@ -1891,29 +1913,6 @@ Public Class Camera
                 If IntPtr.Size = 8 Then libraw_close64(h) Else libraw_close32(h)
             End If
             pin.Free()
-        End Try
-    End Sub
-
-    ''' <summary>
-    ''' Convert a captured RW2/JPG file (the WiFi path downloads to disk) into pixels.
-    ''' RAW is read into memory and decoded there, same as USB, so no TIFF is produced.
-    ''' </summary>
-    Private Sub ConvertToTiff(imagepath As String, isRaw As Boolean)
-        TiffFileName = imagepath.Substring(0, imagepath.Length - 3) & "tif"
-        Try
-            If isRaw Then
-                DecodeRawBuffer(IO.File.ReadAllBytes(imagepath))
-                Try : My.Computer.FileSystem.DeleteFile(imagepath) : Catch : End Try
-                Return
-            End If
-            ' JPG/Thumb still round-trips through a TIFF: the .NET decoder is already fast
-            ' on a file this size, and there is no LibRaw involved to hand back a buffer.
-            Dim jpg = Image.FromFile(imagepath)
-            jpg.Save(TiffFileName, System.Drawing.Imaging.ImageFormat.Tiff)
-            jpg.Dispose()
-            Try : My.Computer.FileSystem.DeleteFile(imagepath) : Catch : End Try
-        Catch ex As Exception
-            TL.LogMessage("ConvertToTiff", "failed: " & ex.Message)
         End Try
     End Sub
 
@@ -2155,10 +2154,17 @@ Public Class Camera
             ' the shutter closing and the first byte arriving used to be ~3 s of unexplained
             ' HTTP chatter.
             Dim swWifi As System.Diagnostics.Stopwatch = System.Diagnostics.Stopwatch.StartNew()
+            ' The camera refuses playmode until it has finished writing the frame to its
+            ' card, so this loop is a readiness poll, not a retry. It used to back off a
+            ' flat second between attempts, which rounds the wait up to the next whole
+            ' second: the camera being ready at 2.1 s cost 3 s. Poll four times as often
+            ' for the same ceiling.
+            tries = PLAYMODE_RETRIES
             Do
                 temp = SendLumixMessage(PLAYMODE)   'making sure the camera is in Playmode
                 If temp.Contains("err") Then
-                    Thread.Sleep(1000)
+                    TL.LogMessage("waiting for playmode", swWifi.ElapsedMilliseconds & " ms: " & temp.Trim())
+                    Thread.Sleep(PLAYMODE_WAIT_MS)
                 End If
                 tries -= 1
             Loop While (tries > 0 And temp.Contains("err"))
@@ -2216,6 +2222,11 @@ Public Class Camera
             Dim start_time As DateTime = Now
             Dim stop_time As DateTime
             Dim elapsed_time As TimeSpan
+            ' The download lands in memory, not in TempPath. The downloaded file existed
+            ' only to be handed straight back to the decoder and then deleted, so every
+            ' RAW frame cost an ~18.7 MB write plus an ~18.7 MB read for nothing. Declared
+            ' outside the retry loop so a resumed transfer appends to what already arrived.
+            Dim buffer As New IO.MemoryStream(24 * 1024 * 1024)
             Do
                 theRequest = HttpWebRequest.Create(Images)
                 TL.LogMessage("reading stream ", Images & " position " & nRead)
@@ -2238,13 +2249,7 @@ Public Class Camera
                     Exit Do
 
                 End Try
-                Dim writeStream As IO.FileStream
-                writeStream = New FileStream(TempPath & LocalNameFor(Images), IO.FileMode.OpenOrCreate)
-                If nRead > 0 Then
-                    writeStream.Position = nRead
-                End If
-
-                TL.LogMessage("opening or creating  file", Images)
+                buffer.Position = nRead
                 Try
                     ' Allocate once and hold the stream in a local. The old loop built a
                     ' new buffer and re-read the GetResponseStream property on every
@@ -2261,10 +2266,7 @@ Public Class Camera
                             TL.LogMessage("reached end of stream ", Images & " position " & nRead)
                             Exit Do
                         End If
-                        ' No Flush() here. FileStream buffers for exactly this reason, and
-                        ' flushing per chunk forced a disk write per kilobyte; the stream
-                        ' is flushed and closed below, which is what actually matters.
-                        writeStream.Write(readBytes, 0, bytesread)
+                        buffer.Write(readBytes, 0, bytesread)
                         stop_time = Now
                         elapsed_time = stop_time.Subtract(start_time)
                         If elapsed_time.TotalSeconds > 30 Then
@@ -2273,8 +2275,6 @@ Public Class Camera
 
                     Loop
                     src.Close()
-                    writeStream.Flush()
-                    writeStream.Close()
                     stop_time = Now
                     elapsed_time = stop_time.Subtract(start_time)
                     If elapsed_time.TotalSeconds > 30 Then
@@ -2290,8 +2290,6 @@ Public Class Camera
                     nRead -= 8192
                     If nRead < 0 Then nRead = 0
                     theResponse.GetResponseStream.Close()
-                    writeStream.Flush()
-                    writeStream.Close()
                 End Try
                 stop_time = Now
                 elapsed_time = stop_time.Subtract(start_time)
@@ -2299,52 +2297,19 @@ Public Class Camera
                     Throw New ASCOM.DriverException
                 End If
             Loop While bytesread > 0
+            TL.LogMessage("WiFi timing", "download " & swWifi.ElapsedMilliseconds & " ms (" & nRead & " bytes)")
+            swWifi.Restart()
 
-            If ReadoutMode = 1 Then 'RAW . needs libraw conversion
-                Try
-
-                    Dim imagepath = TempPath & LocalNameFor(Images)
-                    TiffFileName = imagepath.Substring(0, imagepath.Length() - 3) + "tif"
-
-                    Dim libraw_data_t As IntPtr
-
-                    If (IntPtr.Size = 8) Then
-
-                        libraw_data_t = libraw_init64(1)
-                        libraw_open_file64(libraw_data_t, imagepath)
-                        libraw_unpack64(libraw_data_t)
-                        libraw_set_output_tif64(libraw_data_t, 1)
-                        libraw_dcraw_process64(libraw_data_t)
-                        libraw_dcraw_ppm_tiff_writer64(libraw_data_t, TiffFileName)
-                        libraw_close64(libraw_data_t)
-                    Else
-                        libraw_data_t = libraw_init32(1)
-                        libraw_open_file32(libraw_data_t, imagepath)
-                        libraw_unpack32(libraw_data_t)
-                        libraw_set_output_tif32(libraw_data_t, 1)
-                        libraw_dcraw_process32(libraw_data_t)
-                        libraw_dcraw_ppm_tiff_writer32(libraw_data_t, TiffFileName)
-                        libraw_close32(libraw_data_t)
-                    End If
-                    My.Computer.FileSystem.DeleteFile(TempPath & LocalNameFor(Images))
-                Catch e As Exception
-                    TL.LogMessage("Converting to tiff via DCRAW", Images & " file not found")
-                End Try
-            Else 'JPG image. VB can translate into TIFF natively
-                Try
-
-                    Dim imagepath = TempPath & LocalNameFor(Images)
-                    Dim jpg = Image.FromFile(imagepath)
-
-                    TiffFileName = imagepath.Substring(0, imagepath.Length() - 3) + "tif"
-                    jpg.Save(TiffFileName, System.Drawing.Imaging.ImageFormat.Tiff)
-                    jpg.Dispose() 'cleaning up aftermyself and removing the jpg file once it is used and transformed into a tiff
-                    My.Computer.FileSystem.DeleteFile(imagepath)
-
-                Catch e As Exception
-                    TL.LogMessage("Converting to tiff via vb", Images & " file not found")
-                End Try
-            End If
+            ' Same decode the USB path uses: RAW goes through libraw_open_buffer and comes
+            ' back as pixels, a JPEG through System.Drawing. This route used to be a second,
+            ' file-based copy of the same logic - LibRaw writing a ~31 MB TIFF that WPF read
+            ' straight back - so WiFi never got the in-memory decode that USB already had.
+            ' ReadoutMode 1 is RAW; 0 (jpg) and 2 (thumbnail) are both JPEG.
+            ' GetBuffer, not ToArray: ToArray copies the whole ~18.7 MB onto the large
+            ' object heap a second time for no reason. The backing array is longer than the
+            ' download, hence the explicit count.
+            ConvertToTiffFromBuffer(buffer.GetBuffer(), ReadoutMode = 1, nRead)
+            TL.LogMessage("WiFi timing", "decode " & swWifi.ElapsedMilliseconds & " ms")
 
         Catch ex As Exception
             ' Log what actually failed. This used to log the fixed string "error in
@@ -2367,16 +2332,16 @@ Public Class Camera
             cameraImageReady = False
             CurrentState = CameraStates.cameraIdle
             TL.LogMessage("Imageready", "False (aborted)")
-        ElseIf Not String.IsNullOrEmpty(TiffFileName) AndAlso IO.File.Exists(TiffFileName) Then
+        ElseIf HaveDecodedFrame() Then
             CurrentState = CameraStates.cameraIdle
             cameraImageReady = True
             TL.LogMessage("Imageready", "true")
         Else
-            ' Conversion failed (no TIFF): don't report ImageReady=True and then throw
-            ' FileNotFound from ImageArray - report the error state instead.
+            ' Conversion failed: don't report ImageReady=True and then throw from
+            ' ImageArray - report the error state instead.
             cameraImageReady = False
             CurrentState = CameraStates.cameraError
-            TL.LogMessage("Imageready", "False (no TIFF produced)")
+            TL.LogMessage("Imageready", "False (no image decoded)")
         End If
 
     End Sub
