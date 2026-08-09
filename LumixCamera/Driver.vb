@@ -1532,6 +1532,17 @@ Public Class Camera
     Private Const PLAYMODE_WAIT_MS As Integer = 250
     Private Const PLAYMODE_RETRIES As Integer = 24
 
+    ' WiFi image download tuning. RAW (RW2, ~18 MB) over the camera's own access point
+    ' cannot finish inside the old flat 30 s wall-clock cap - at the ~0.4 MB/s the body
+    ' streams that is a ~47 s transfer - and the camera tends to serve the object in
+    ' bounded chunks, closing the stream early. So the download resumes with a byte Range
+    ' until it has the whole Content-Length, bounded by an overall ceiling and a
+    ' no-progress bailout rather than a fixed wall clock.
+    Private Const DOWNLOAD_RESPONSE_TIMEOUT_MS As Integer = 20000 ' cap on GetResponse()
+    Private Const DOWNLOAD_STALL_MS As Integer = 15000           ' ReadWriteTimeout: a mid-stream stall throws (and resumes) instead of blocking
+    Private Const DOWNLOAD_MAX_MS As Integer = 180000            ' overall ceiling for one frame's download
+    Private Const DOWNLOAD_MAX_NOPROGRESS As Integer = 5         ' consecutive zero-byte attempts before giving up
+
     Private Function NumberPix() As String
         Dim response As String = SendLumixMessage(NUMPIX)
         ' err_busy / err_param etc: not ready (or refused) - report "not available".
@@ -2216,88 +2227,111 @@ Public Class Camera
 
             nRead = 0
 
-            Dim theResponse As HttpWebResponse
-            Dim theRequest As HttpWebRequest
-            Dim bytesread As Integer = 0
-            Dim start_time As DateTime = Now
-            Dim stop_time As DateTime
-            Dim elapsed_time As TimeSpan
-            ' The download lands in memory, not in TempPath. The downloaded file existed
-            ' only to be handed straight back to the decoder and then deleted, so every
-            ' RAW frame cost an ~18.7 MB write plus an ~18.7 MB read for nothing. Declared
-            ' outside the retry loop so a resumed transfer appends to what already arrived.
+            ' The download lands in memory, not in TempPath. The file used to exist only to
+            ' be handed straight back to the decoder and deleted, costing an ~18.7 MB write
+            ' plus read per RAW frame. The camera serves the object in bounded chunks and
+            ' closes the stream early, so we resume with a byte Range until we have the whole
+            ' Content-Length, bounded by an overall ceiling and a no-progress bailout rather
+            ' than the old flat 30 s wall clock that RAW could never beat.
             Dim buffer As New IO.MemoryStream(24 * 1024 * 1024)
+            Dim expectedLen As Long = -1    ' Content-Length of the whole object, once known
+            Dim attempts As Integer = 0
+            Dim noProgress As Integer = 0
+            Dim restarts As Integer = 0     ' times the camera ignored Range and served from 0
+            Dim complete As Boolean = False
+
             Do
-                theRequest = HttpWebRequest.Create(Images)
-                TL.LogMessage("reading stream ", Images & " position " & nRead)
+                attempts += 1
+                Dim posBefore As Integer = nRead
+                Dim cleanEof As Boolean = False
+
+                Dim theRequest As HttpWebRequest = DirectCast(HttpWebRequest.Create(Images), HttpWebRequest)
                 theRequest.KeepAlive = True
                 theRequest.ProtocolVersion = HttpVersion.Version11
                 theRequest.ServicePoint.ConnectionLimit = 1
+                theRequest.Timeout = DOWNLOAD_RESPONSE_TIMEOUT_MS
+                theRequest.ReadWriteTimeout = DOWNLOAD_STALL_MS ' a mid-stream stall raises instead of blocking, so we resume
                 If nRead > 0 Then
-                    theRequest.AddRange(nRead)
-                    GetPix(1) 'if the file not found happened then this trick is to get the camera in a readmode again and making sure it remembers the filename
-                    TL.LogMessage("continuing the read where it stopped", Images & " position " & nRead)
-
+                    theRequest.AddRange(nRead)  ' resume from where the previous attempt stopped
+                    GetPix(1)                   ' nudge the camera back into serving this file (it forgets between requests)
                 End If
+                TL.LogMessage("download", "attempt " & attempts & " GET from byte " & nRead & If(nRead > 0, " (range)", ""))
 
+                Dim theResponse As HttpWebResponse = Nothing
                 Try
-                    theResponse = theRequest.GetResponse()
-
+                    theResponse = DirectCast(theRequest.GetResponse(), HttpWebResponse)
                 Catch ex As Exception
-
-                    TL.LogMessage("error in reading stream ", Images & " position " & nRead)
-                    Exit Do
-
+                    TL.LogMessage("download", "GetResponse failed at " & nRead & ": " & ex.Message)
                 End Try
-                buffer.Position = nRead
-                Try
-                    ' Allocate once and hold the stream in a local. The old loop built a
-                    ' new buffer and re-read the GetResponseStream property on every
-                    ' iteration; at 64 KB that is 286 trips for an 18.7 MB RAW instead of
-                    ' 18,300, and the buffer no longer churns the heap.
-                    Dim readBytes(buflen - 1) As Byte
-                    Dim src As IO.Stream = theResponse.GetResponseStream()
-                    Do
-                        CurrentPercentCompleted = Math.Min(nRead \ 80000, 100) 'assuming a jpg is not longer than 8MB (nRead\80000 avoids the Int32 overflow of 100*nRead on >21MB RAW)
-                        bytesread = src.Read(readBytes, 0, buflen)
 
-                        nRead = nRead + bytesread
-                        If bytesread = 0 Then
-                            TL.LogMessage("reached end of stream ", Images & " position " & nRead)
-                            Exit Do
+                If theResponse IsNot Nothing Then
+                    Dim status As Integer = CInt(theResponse.StatusCode)
+                    Dim bodyLen As Long = theResponse.ContentLength
+                    If nRead = 0 Then
+                        expectedLen = bodyLen ' first (full) response carries the whole length
+                    ElseIf status = 200 Then
+                        ' The camera ignored our Range and restarted from the top. Appending
+                        ' would duplicate the prefix; if it does this every time, resume is
+                        ' impossible and RAW simply cannot be pulled over WiFi.
+                        restarts += 1
+                        TL.LogMessage("download", "camera ignored Range (HTTP 200 on resume, restart " & restarts & ")")
+                        If restarts > 1 Then
+                            Throw New ASCOM.DriverException("Camera does not honour HTTP Range on RW2 (only " & bodyLen &
+                                " bytes served per request) - RAW cannot be completed over WiFi; use the USB path for RAW.")
                         End If
-                        buffer.Write(readBytes, 0, bytesread)
-                        stop_time = Now
-                        elapsed_time = stop_time.Subtract(start_time)
-                        If elapsed_time.TotalSeconds > 30 Then
-                            Throw New ASCOM.DriverException
-                        End If
-
-                    Loop
-                    src.Close()
-                    stop_time = Now
-                    elapsed_time = stop_time.Subtract(start_time)
-                    If elapsed_time.TotalSeconds > 30 Then
-                        Throw New ASCOM.DriverException
+                        buffer.SetLength(0)
+                        nRead = 0
+                        posBefore = 0
+                        expectedLen = bodyLen
                     End If
+                    TL.LogMessage("download", "HTTP " & status & " bodyLen=" & bodyLen & " total-expected=" & expectedLen)
 
-                Catch e As System.IO.IOException
-                    TL.LogMessage("camera stopped streaming  ", Images & " position  " & nRead)
-                    ' Back up a little and resume via AddRange. Fixed at 8 KB rather than
-                    ' 8 * buflen: that expression was written when buflen was 1 KB, and
-                    ' scaling it with the buffer would now discard half a megabyte of a
-                    ' download that was already struggling.
-                    nRead -= 8192
-                    If nRead < 0 Then nRead = 0
-                    theResponse.GetResponseStream.Close()
-                End Try
-                stop_time = Now
-                elapsed_time = stop_time.Subtract(start_time)
-                If elapsed_time.TotalSeconds > 30 Then
-                    Throw New ASCOM.DriverException
+                    buffer.Position = nRead
+                    Try
+                        Dim readBytes(buflen - 1) As Byte
+                        Dim src As IO.Stream = theResponse.GetResponseStream()
+                        Do
+                            Dim n As Integer = src.Read(readBytes, 0, buflen)
+                            If n = 0 Then
+                                cleanEof = True
+                                Exit Do
+                            End If
+                            buffer.Write(readBytes, 0, n)
+                            nRead += n
+                            CurrentPercentCompleted = If(expectedLen > 0, CInt(Math.Min(100L, nRead * 100L \ expectedLen)), Math.Min(nRead \ 80000, 100))
+                        Loop
+                        src.Close()
+                    Catch ioex As Exception
+                        ' ReadWriteTimeout or a mid-stream close lands here; the outer loop resumes.
+                        TL.LogMessage("download", "stream broke at " & nRead & ": " & ioex.Message)
+                    End Try
+                    theResponse.Close()
                 End If
-            Loop While bytesread > 0
-            TL.LogMessage("WiFi timing", "download " & swWifi.ElapsedMilliseconds & " ms (" & nRead & " bytes)")
+
+                ' Done when we have the whole known length, or the camera signalled a clean
+                ' end and never advertised a length (nothing more is coming).
+                If expectedLen > 0 Then
+                    complete = (nRead >= expectedLen)
+                ElseIf cleanEof Then
+                    complete = True
+                End If
+
+                If Not complete Then
+                    If nRead > posBefore Then
+                        noProgress = 0
+                    Else
+                        noProgress += 1
+                        TL.LogMessage("download", "no progress (" & noProgress & "/" & DOWNLOAD_MAX_NOPROGRESS & ") at byte " & nRead)
+                        If noProgress >= DOWNLOAD_MAX_NOPROGRESS Then
+                            Throw New ASCOM.DriverException("RAW download stalled at " & nRead & " of " & expectedLen & " bytes")
+                        End If
+                    End If
+                    If swWifi.ElapsedMilliseconds > DOWNLOAD_MAX_MS Then
+                        Throw New ASCOM.DriverException("RAW download exceeded " & (DOWNLOAD_MAX_MS \ 1000) & "s at " & nRead & " of " & expectedLen & " bytes")
+                    End If
+                End If
+            Loop While Not complete
+            TL.LogMessage("WiFi timing", "download " & swWifi.ElapsedMilliseconds & " ms (" & nRead & " bytes, " & attempts & " attempts)")
             swWifi.Restart()
 
             ' Same decode the USB path uses: RAW goes through libraw_open_buffer and comes
