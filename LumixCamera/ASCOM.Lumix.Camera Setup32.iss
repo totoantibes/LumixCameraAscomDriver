@@ -16,7 +16,7 @@
 ; same driver installing to the same folder, so installing one replaces the other.
 ;
 
-#define AppVer "8.0.1"
+#define AppVer "8.1.0"
 ; Paths are relative to this .iss file so the script builds on any machine.
 #define RepoRoot AddBackslash(SourcePath) + "..\"
 #define BinDir   AddBackslash(SourcePath) + "bin\x86\Release\"

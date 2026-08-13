@@ -46,7 +46,7 @@ the same time.
 | transfer formats | JPG, RAW, Thumb | RAW | RAW, JPG |
 | exposures | discrete speeds + bulb | discrete speeds | discrete speeds **and bulb of any length, including over 60 s** |
 | live view | yes (MJPEG over UDP, VGA or QVGA) | yes | yes |
-| speed | ~14-20 s per RAW frame | ~3-6 s per frame | ~3-6 s per frame |
+| speed | ~8-15 s per RAW frame (direct link) | ~3-6 s per frame | ~3-6 s per frame |
 | 32-bit build | yes | no | no |
 
 **USB Extended** is the interesting one: it uses the fuller SDK that ships with Panasonic's
@@ -83,7 +83,6 @@ To connect your PC to the camera:
 	4.	IP address is populated by the driver after its discovery.  
 	5.	Check that the correct resolution for your camera is discovered  
 	4.	set the ISO, Speed and TransferFormat (JPG, Thumb or Raw): read below for details  
-	6.	Temp folder to store the files from the camera.   
 	8.	Hit ok.  
 	10.	The Astro Software then gets data from the driver like the pixel pitch but does not get the temperature� in your Astro Software you can then set the Bulb seconds of the capture the gain etc. 
 	![](./readme_files/image007.png)
@@ -96,7 +95,7 @@ To connect your PC to the camera:
 
 1.	On the camera: set the USB mode to PC / tethered shooting, and plug the cable in. Turn Wi-Fi off - the body will not do both.
 2.	On the PC: open the driver's Properties as above. The **Connection** dropdown at the top should already show *USB (Standard)* or *USB Extended (Tether)*, and the status line underneath names the camera it found (e.g. `USB cam: DC-GH5S   Tether: found`).
-3.	Choose the transfer format (RAW, or RAW/JPG in Extended), the temp folder, and press OK.
+3.	Choose the transfer format (RAW, or RAW/JPG in Extended) and press OK.
 4.	Connect from your imaging software as usual. No IP address and no network discovery are involved.
 
 ### Live view
@@ -113,25 +112,30 @@ frame size and rate so you can tell what you are getting.
 
 
 
-The driver allows to set the speed, iso and format of the camera transfers the image (Raw or JPG) on the PC and exposes the image array in RGB to the calling program. This will create a 16bit image regardless of what the transfer format was. Note that the driver will force the camera to store RAW and Fine JPG.
+The driver sets the camera's speed, ISO and transfer format, pulls the image (RAW or JPG) to
+the PC, and exposes it to the calling program as a 16-bit RGB image array regardless of the
+transfer format. The driver forces the camera to store RAW and Fine JPG.
 
-It relies on LibRaw to handle the Raw format, or the native VB.NET imaging for JPG
-Images are then translated into Tiff and then passed to the image array.
+Decoding happens **in memory on both transports**. A RAW frame goes straight from the transfer
+buffer to LibRaw (`libraw_open_buffer`) and never touches the disk. A JPG is decoded from the
+buffer by the .NET imaging stack; the one intermediate it still needs - a TIFF that
+`ImageArray` reads back - is written to the **system temp area** under a unique name and
+deleted as soon as `ImageArray` has been read. There is no user-configurable temp folder any
+more; earlier versions had one for a file-based download path that no longer exists.
 
-Over **USB** the frame is decoded **entirely in memory**: the Panasonic SDK hands the whole
-file back as a buffer, which goes straight to LibRaw (`libraw_open_buffer`) or, for JPG, to
-the .NET imaging decoder. Nothing is written to a temp folder, so the **Temp folder setting
-applies to the Wi-Fi download path only** - over USB it is ignored and the one intermediate
-the driver still makes (the TIFF) lives in the system temp area under a unique name and is
-deleted after `ImageArray` is read.
+RAW is the higher-quality choice but the file is much larger and slower to transfer, and over
+Wi-Fi the camera streams it slowly. Earlier versions aborted a slow RAW at a fixed 30 s and
+passed on a truncated frame; the Wi-Fi download now **resumes until the whole file has arrived**
+(with a byte-range resume if the camera stalls mid-stream), and the content browse is hardened
+against the camera's DLNA quirks - so a RAW-over-Wi-Fi capture completes reliably. Expect
+roughly 8-15 s per RAW frame on a solid direct link, more on a weak link or through a Wi-Fi
+repeater.
 
-RAW would be preferred but the file is substantially larger and therefore longer to transfer. Therefore the download is often interrupted. the driver tries to recover/continue the download  but it does not always work smoothly. this leaves with an incomplete RAW file that is still passed on but not ideal.
-
-Given the longer transfer time it substantially cuts into the active shooting since all this process is sequential
-So, if you have a 1mn exposure and it takes 40s to get it onto your driver that is 40s you are not shooting...
-
-Hence the jpg transfer option. file is smaller and transfer faster and should still be valuable for the Astro SW.
-In any case the camera keeps the RAW or the RAW+jpg on the SD card and the Astro SW should have a fits file from the driver. The transferred files (jpg or raw) and intermediary tiff files are deleted as soon as possible (i.e. once the imagearray has been passed to the astro Software) in order to save disk space. Code is quite nasty and could use some factoring into further utility classes/methods etc.
+Because the readout is sequential with shooting, that time is time you are not exposing - a
+1-minute sub plus a 15 s readout is 15 s of lost sky. Hence the smaller, faster **JPG**
+transfer, which is still perfectly usable for plate-solving. In every case the camera keeps
+the RAW (or RAW+JPG) on its SD card, and your imaging software still gets a FITS frame from the
+driver.
 
 I added a "thumb" transfer mode which takes a large thumbnail of the image (1440x1080) in order to further reduce the transfer size. After exptensive tests it seems that platesolving is working well with the Thumb format too as the resolution is changed based on the THumb size and the pixelpitch is changed in the driver so to help in that process.
 

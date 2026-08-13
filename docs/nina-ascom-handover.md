@@ -1,6 +1,6 @@
 # Handover to the N.I.N.A. team — two ASCOM camera issues
 
-**From:** Lumix ASCOM Camera driver (`ASCOM.Lumix.Camera`, v8.0.0) — https://github.com/totoantibes/LumixCameraAscomDriver
+**From:** Lumix ASCOM Camera driver (`ASCOM.Lumix.Camera`, v8.1.0) — https://github.com/totoantibes/LumixCameraAscomDriver
 **Repo this concerns:** https://github.com/isbeorn/nina (issues previously at `bitbucket.org/Isbeorn/nina`)
 **Test rig:** Panasonic GH5S, over both Wi-Fi and USB (PTP SDK), ASCOM Platform 6.6, Windows 11.
 
@@ -132,7 +132,7 @@ values are on the wire and reach the client.
 
 Once the camera is connected, NINA's setup/properties button for the ASCOM device is
 disabled. Changing anything the driver owns — transfer format (RAW/JPG/Thumb), default
-ISO and shutter, temp folder, or opening the driver's Live View window — requires
+ISO and shutter, or opening the driver's Live View window — requires
 disconnecting the camera and reconnecting. Mid-session that is disruptive; APT allowed
 this.
 
@@ -180,7 +180,7 @@ our setup dialog:
   reconnect — camera IP, transport (Wi-Fi / USB), and sensor resolution (which clients
   read once and cache) — and says so in the title bar;
 * **applies everything else to the live camera immediately** on OK — ISO, shutter,
-  transfer format, temp folder;
+  transfer format;
 * never re-opens or drops the existing connection as a side effect of being shown.
 
 ### Suggested fixes
