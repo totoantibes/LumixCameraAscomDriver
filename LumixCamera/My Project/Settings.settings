@@ -26,5 +26,8 @@
     <Setting Name="Resolution" Type="System.String" Scope="User">
       <Value Profile="(Default)" />
     </Setting>
+    <Setting Name="SubSecondExposure" Type="System.String" Scope="User">
+      <Value Profile="(Default)">CameraList</Value>
+    </Setting>
   </Settings>
 </SettingsFile>

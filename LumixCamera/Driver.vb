@@ -1764,14 +1764,23 @@ Public Class Camera
             Dim swPhase As System.Diagnostics.Stopwatch = System.Diagnostics.Stopwatch.StartNew()
             Dim dur As Double = cameraLastExposureDuration
             Dim res As ASCOM.Lumix.Usb.CaptureResult
-            If UsbTransport.IsExtended AndAlso dur > 1.0 Then
-                ' Extended mode: hold the shutter open for the exact time (bulb), any duration incl. >60s.
+            ' "Bulb" holds the shutter open for the exact requested time (Extended SDK only);
+            ' "CameraList" snaps a sub-1s exposure to the nearest discrete shutter speed. Any
+            ' exposure over 1s always uses bulb. USB Standard (no bulb) and Wi-Fi (always bulb)
+            ' ignore this setting - the setup dialog greys it out for them.
+            Dim preferBulb As Boolean = String.Equals(My.Settings.SubSecondExposure, "Bulb", StringComparison.OrdinalIgnoreCase)
+            If UsbTransport.IsExtended AndAlso (dur > 1.0 OrElse preferBulb) Then
+                ' Extended: hold the shutter open for the exact time (bulb), any duration incl. >60s.
                 TL.LogMessage("USB capture", "bulb " & dur & "s")
                 res = UsbTransport.CaptureBulb(dur, CInt(dur * 1000) + 120000)
             Else
                 ' Snap to the nearest supported discrete shutter speed and fire a one-shot.
                 Dim actual As Double = UsbTransport.SetShutterSeconds(dur)
                 TL.LogMessage("USB capture", "requested " & dur & "s -> nearest " & actual & "s")
+                ' Report what the camera actually did, not what was asked. LastExposureDuration
+                ' must be the real exposure, or a client's exposure/ADU model breaks when several
+                ' requested values snap to the same shutter speed (e.g. the flat wizard's bisection).
+                cameraLastExposureDuration = actual
                 res = UsbTransport.Capture(90000)
             End If
             If res IsNot Nothing AndAlso res.Success Then

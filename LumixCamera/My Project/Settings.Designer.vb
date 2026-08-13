@@ -137,6 +137,18 @@ Namespace My
                 Me("TempPath") = value
             End Set
         End Property
+
+        <Global.System.Configuration.UserScopedSettingAttribute(),  _
+         Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
+         Global.System.Configuration.DefaultSettingValueAttribute("CameraList")>  _
+        Public Property SubSecondExposure() As String
+            Get
+                Return CType(Me("SubSecondExposure"),String)
+            End Get
+            Set
+                Me("SubSecondExposure") = value
+            End Set
+        End Property
         
         <Global.System.Configuration.UserScopedSettingAttribute(),  _
          Global.System.Diagnostics.DebuggerNonUserCodeAttribute(),  _
