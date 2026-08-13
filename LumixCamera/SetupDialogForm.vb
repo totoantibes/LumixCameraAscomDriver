@@ -40,8 +40,8 @@ Public Class SetupDialogForm
         If CBISO.SelectedItem IsNot Nothing Then My.Settings.ISO = CBISO.SelectedItem.ToString()
         If CBReadoutMode.SelectedItem IsNot Nothing Then My.Settings.TransferFormat = CBReadoutMode.SelectedItem.ToString()
         My.Settings.IPAddress = cam.IPAddress
-        My.Settings.TempPath = TBTempPath.Text
         My.Settings.ConnectionMode = SelectedMode ' persist the chosen transport for next session
+        If cbSubSecond IsNot Nothing Then My.Settings.SubSecondExposure = If(cbSubSecond.SelectedIndex = 1, "Bulb", "CameraList")
         Me.DialogResult = System.Windows.Forms.DialogResult.OK
         Me.Close()
     End Sub
@@ -100,6 +100,8 @@ Public Class SetupDialogForm
     Private CBConnectionMode As ComboBox
     Private lblModeStatus As Label
     Private btnLiveView As Button
+    Private cbSubSecond As ComboBox
+    Private lblSubSecond As Label
 
     ''' <summary>
     ''' Add the connection-mode selector at the top of the form (WiFi / USB / USB
@@ -194,8 +196,50 @@ Public Class SetupDialogForm
                 End If
                 RefreshTransferFormats()   ' the offered formats differ per transport
                 RefreshLiveViewButton()
+                RefreshSubSecondEnabled()  ' only USB Extended can honour a bulb/snap choice
             End Sub
         AddHandler CBCameraIPAddress.SelectedIndexChanged, Sub(s, e) RefreshLiveViewButton()
+
+        ' Sub-second exposure mode. Only USB Extended can honour a choice (Wi-Fi is always
+        ' bulb; USB Standard can only snap), so the combo is greyed with a hint otherwise.
+        ' Placed in the space the removed temp-folder field freed, beside the ASCOM logo.
+        ' Align the sub-second row with the TransferFormat row using the LIVE positions of the
+        ' existing dropdowns, so it lines up regardless of DPI/font auto-scaling (raw designer
+        ' pixels drift under scaling). One row-height below the last dropdown - still well above
+        ' the OK/Cancel panel. Terse items so they fit the same width; the tooltip has the rest.
+        Dim rowGap As Integer = CBReadoutMode.Top - CBShutterSpeed.Top
+        cbSubSecond = New ComboBox With {
+            .DropDownStyle = ComboBoxStyle.DropDownList,
+            .Location = New Drawing.Point(CBReadoutMode.Left, CBReadoutMode.Top + rowGap),
+            .Size = CBReadoutMode.Size}
+        cbSubSecond.Items.AddRange(New Object() {"Camera list", "Bulb"})
+        cbSubSecond.SelectedIndex = If(String.Equals(My.Settings.SubSecondExposure, "Bulb", StringComparison.OrdinalIgnoreCase), 1, 0)
+        Me.Controls.Add(cbSubSecond)
+        lblSubSecond = New Label With {.Text = "Sub-second exp.", .Location = New Drawing.Point(12, cbSubSecond.Top + 4), .AutoSize = True}
+        Me.Controls.Add(lblSubSecond)
+        RefreshSubSecondEnabled()
+    End Sub
+
+    ''' <summary>
+    ''' Enable the sub-second exposure choice only for USB Extended - the one transport that
+    ''' can both bulb and snap. Wi-Fi is always bulb; USB Standard can only snap. The tooltip
+    ''' explains which case applies.
+    ''' </summary>
+    Private Sub RefreshSubSecondEnabled()
+        If cbSubSecond Is Nothing Then Return
+        Dim ext As Boolean = (SelectedMode = "USBExtended")
+        cbSubSecond.Enabled = ext
+        If lblSubSecond IsNot Nothing Then lblSubSecond.ForeColor = If(ext, Drawing.SystemColors.ControlText, Drawing.Color.DimGray)
+        Dim hint As String
+        If ext Then
+            hint = "For exposures under 1 s: ""Camera list"" snaps to the nearest real shutter speed (accurate but discrete); ""Bulb"" holds the shutter open for the exact time (no snapping, but very short bulbs are imprecise)."
+        ElseIf SelectedMode = "WiFi" Then
+            hint = "Wi-Fi always uses bulb timing, so there is nothing to choose here. This setting applies to USB Extended (Tether) only."
+        Else
+            hint = "USB Standard cannot hold a bulb, so sub-second exposures always snap to the nearest shutter speed. The Bulb option needs USB Extended (Tether)."
+        End If
+        ToolTip1.SetToolTip(cbSubSecond, hint)
+        ToolTip1.SetToolTip(lblSubSecond, hint)
     End Sub
 
     ''' <summary>True once the LAN discovery has been run for this dialog.</summary>
@@ -618,12 +662,6 @@ Public Class SetupDialogForm
 
 
 
-        If My.Settings.TempPath <> "" Then
-            TBTempPath.Text = My.Settings.TempPath ' use the saved temp path
-        Else
-            TBTempPath.Text = "C:\Temp\" ' default temp path
-        End If
-
     End Sub
 
 
@@ -745,12 +783,6 @@ Public Class SetupDialogForm
 
     Private Sub CameraIPAddress_ValueMemberChanged(sender As Object, e As EventArgs) Handles CBCameraIPAddress.ValueMemberChanged
         If CBCameraIPAddress.SelectedItem IsNot Nothing Then cam.IPAddress = CBCameraIPAddress.SelectedItem.ToString()
-    End Sub
-
-    Private Sub ButtonTemp_Click(sender As Object, e As EventArgs) Handles ButtonTemp.Click
-        If FolderBrowserDialog1.ShowDialog = DialogResult.OK Then
-            TBTempPath.Text = Path.GetFullPath(FolderBrowserDialog1.SelectedPath + "\")
-        End If
     End Sub
 
     Private Sub Label8_Click(sender As Object, e As EventArgs) Handles Label8.Click

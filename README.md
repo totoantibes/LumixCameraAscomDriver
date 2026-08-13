@@ -46,7 +46,7 @@ the same time.
 | transfer formats | JPG, RAW, Thumb | RAW | RAW, JPG |
 | exposures | discrete speeds + bulb | discrete speeds | discrete speeds **and bulb of any length, including over 60 s** |
 | live view | yes (MJPEG over UDP, VGA or QVGA) | yes | yes |
-| speed | ~14-20 s per RAW frame | ~3-6 s per frame | ~3-6 s per frame |
+| speed | ~8-15 s per RAW frame (direct link) | ~3-6 s per frame | ~3-6 s per frame |
 | 32-bit build | yes | no | no |
 
 **USB Extended** is the interesting one: it uses the fuller SDK that ships with Panasonic's
@@ -83,7 +83,6 @@ To connect your PC to the camera:
 	4.	IP address is populated by the driver after its discovery.  
 	5.	Check that the correct resolution for your camera is discovered  
 	4.	set the ISO, Speed and TransferFormat (JPG, Thumb or Raw): read below for details  
-	6.	Temp folder to store the files from the camera.   
 	8.	Hit ok.  
 	10.	The Astro Software then gets data from the driver like the pixel pitch but does not get the temperature� in your Astro Software you can then set the Bulb seconds of the capture the gain etc. 
 	![](./readme_files/image007.png)
@@ -96,7 +95,7 @@ To connect your PC to the camera:
 
 1.	On the camera: set the USB mode to PC / tethered shooting, and plug the cable in. Turn Wi-Fi off - the body will not do both.
 2.	On the PC: open the driver's Properties as above. The **Connection** dropdown at the top should already show *USB (Standard)* or *USB Extended (Tether)*, and the status line underneath names the camera it found (e.g. `USB cam: DC-GH5S   Tether: found`).
-3.	Choose the transfer format (RAW, or RAW/JPG in Extended), the temp folder, and press OK.
+3.	Choose the transfer format (RAW, or RAW/JPG in Extended) and press OK.
 4.	Connect from your imaging software as usual. No IP address and no network discovery are involved.
 
 ### Live view
@@ -113,22 +112,72 @@ frame size and rate so you can tell what you are getting.
 
 
 
-The driver allows to set the speed, iso and format of the camera transfers the image (Raw or JPG) on the PC and exposes the image array in RGB to the calling program. This will create a 16bit image regardless of what the transfer format was. Note that the driver will force the camera to store RAW and Fine JPG.
+The driver sets the camera's speed, ISO and transfer format, pulls the image (RAW or JPG) to
+the PC, and exposes it to the calling program as a 16-bit RGB image array regardless of the
+transfer format. The driver forces the camera to store RAW and Fine JPG.
 
-It relies on LibRaw to handle the Raw format, or the native VB.NET imaging for JPG
-Images are then translated into Tiff and then passed to the image array.
+Decoding happens **in memory on both transports**. A RAW frame goes straight from the transfer
+buffer to LibRaw (`libraw_open_buffer`) and never touches the disk. A JPG is decoded from the
+buffer by the .NET imaging stack; the one intermediate it still needs - a TIFF that
+`ImageArray` reads back - is written to the **system temp area** under a unique name and
+deleted as soon as `ImageArray` has been read. There is no user-configurable temp folder any
+more; earlier versions had one for a file-based download path that no longer exists.
 
-RAW would be preferred but the file is substantially larger and therefore longer to transfer. Therefore the download is often interrupted. the driver tries to recover/continue the download  but it does not always work smoothly. this leaves with an incomplete RAW file that is still passed on but not ideal.
+RAW is the higher-quality choice but the file is much larger and slower to transfer, and over
+Wi-Fi the camera streams it slowly. Earlier versions aborted a slow RAW at a fixed 30 s and
+passed on a truncated frame; the Wi-Fi download now **resumes until the whole file has arrived**
+(with a byte-range resume if the camera stalls mid-stream), and the content browse is hardened
+against the camera's DLNA quirks - so a RAW-over-Wi-Fi capture completes reliably. Expect
+roughly 8-15 s per RAW frame on a solid direct link, more on a weak link or through a Wi-Fi
+repeater.
 
-Given the longer transfer time it substantially cuts into the active shooting since all this process is sequential
-So, if you have a 1mn exposure and it takes 40s to get it onto your driver that is 40s you are not shooting...
-
-Hence the jpg transfer option. file is smaller and transfer faster and should still be valuable for the Astro SW.
-In any case the camera keeps the RAW or the RAW+jpg on the SD card and the Astro SW should have a fits file from the driver. The transferred files (jpg or raw) and intermediary tiff files are deleted as soon as possible (i.e. once the imagearray has been passed to the astro Software) in order to save disk space. Code is quite nasty and could use some factoring into further utility classes/methods etc.
+Because the readout is sequential with shooting, that time is time you are not exposing - a
+1-minute sub plus a 15 s readout is 15 s of lost sky. Hence the smaller, faster **JPG**
+transfer, which is still perfectly usable for plate-solving. In every case the camera keeps
+the RAW (or RAW+JPG) on its SD card, and your imaging software still gets a FITS frame from the
+driver.
 
 I added a "thumb" transfer mode which takes a large thumbnail of the image (1440x1080) in order to further reduce the transfer size. After exptensive tests it seems that platesolving is working well with the Thumb format too as the resolution is changed based on the THumb size and the pixelpitch is changed in the driver so to help in that process.
 
-There used to be an issue with the lastest RW@ 14 bt formats that were not handled by DCraw. This new driver version now relies on LibRaw which is maintained up to date. The latest version of LibRaw.dll is included with the setup and should be installed in the same folder as the driver. I am expecting that just replacing the DLL with a most updated on should fix other RAW format issues that may emeger in the future.
+There used to be an issue with the latest RW2 14-bit formats that DCraw did not handle. The driver uses LibRaw instead, installed next to the driver DLL.
+
+### Exposure timing: bulb vs the camera's shutter list
+
+The camera has a fixed list of discrete shutter speeds (1/4000 … 1 s), plus bulb. How a
+requested exposure is realised depends on the transport:
+
+* **Wi-Fi** always uses **bulb** - the driver opens the shutter, waits the requested time, and
+  closes it. Any duration works, but very short exposures are imprecise because the open/close
+  HTTP round-trips dominate.
+* **USB Standard** can only fire the camera's **discrete shutter speeds**, so a sub-second
+  request is **snapped to the nearest** one.
+* **USB Extended** (LUMIX Tether SDK) can do either, and exposures over 1 s always use bulb.
+
+For sub-second exposures on **USB Extended** the setup dialog offers a choice:
+
+* **Camera list** (default) - snap to the nearest real shutter speed. Accurate, but discrete:
+  0.00079 s becomes 1/1000 s.
+* **Bulb** - hold the shutter open for the exact requested time. No snapping, at the cost of
+  precision on very short exposures.
+
+The control is greyed out (with a tooltip) on Wi-Fi and USB Standard, where the transport
+already dictates the behaviour.
+
+Whichever mode is used, **`LastExposureDuration` reports the exposure actually taken** (the
+snapped 1/1000, not the requested 0.00079). Clients that drive exposure from that value - a
+flat-field wizard hunting a target ADU, say - then see a consistent exposure/brightness
+relationship even when several requested times snap to the same shutter speed.
+
+### LibRaw version, and replacing it yourself
+
+| | shipped with the driver |
+|---|---|
+| 64-bit (`libraw.dll`) | **0.22.2** |
+| 32-bit (`libraw32.dll`) | **0.19.5** - libraw.org no longer publishes an official Win32 binary, so the 32-bit build stays on the last one available. Build from source if you need a newer one. |
+
+The driver **logs the LibRaw version it loaded** in its ASCOM trace at connect (`LibRaw  0.22.2-Release`), so a "my RAW will not decode" question can be answered from the log.
+
+**You can drop in a newer LibRaw yourself** - replace `libraw.dll` in the driver's folder. This is safe: the driver only calls LibRaw's flat C API through opaque handles and marshals none of its structs, so there is no layout to break between versions. A newer LibRaw is the usual fix for a recent camera body whose RAW the driver cannot read - newer than the sensor table in `cameras.json`, which only carries geometry.
 
 # Installation
 
@@ -144,35 +193,9 @@ Both install to the same place, so installing one replaces the other.
 For **USB Extended** (bulb over 60 s) also install Panasonic's **LUMIX Tether**. The
 driver uses its SDK where it is installed; nothing from Tether is redistributed here.
 
-### Building the installers
-
-```
-msbuild LumixCamera\LumixCamera.vbproj -p:Configuration=Release -p:Platform=x64
-msbuild LumixCamera\LumixCamera.vbproj -t:Rebuild -p:Configuration=Release -p:Platform=x86 -p:RegisterForComInterop=false
-ISCC "LumixCamera\ASCOM.Lumix.Camera Setup.iss"
-ISCC "LumixCamera\ASCOM.Lumix.Camera Setup32.iss"
-```
-
-The x86 build passes `RegisterForComInterop=false` because the installer registers the
-assembly itself, and registering during an x86 build fails while an x64 output is present
-(MSB3097). Both installers write to the repository root.
-
 Implements:	ASCOM Camera interface version: 2.0
  Author:		robert hasson robert_hasson@yahoo.com
  this is freeware. no support, no liability whatsoever, use at your own risk, etc...
-
-# Credits to 
- ASCOM library : https://ascom-standards.org/
-
- DCRaw: https://www.cybercom.net/~dcoffin/dcraw/
- 
- LibRaw:  https://www.libraw.org/
-
-not used anymore: 
- NDCRaw : https://github.com/AerisG222/NDCRaw
- MedallionScript: https://github.com/madelson/MedallionShell
-
-the lumix Wifi interface protocol is heavily discussed here: https://www.personal-view.com/talks/discussion/6703/control-your-gh3-from-a-web-browser-now-with-video-/p1
 
 # Adding a camera / resolution
 The known-camera and sensor-resolution tables live in **`cameras.json`**, installed next to the driver DLL. To add a body or fix a resolution, edit that file — no rebuild required:
@@ -187,6 +210,23 @@ The known-camera and sensor-resolution tables live in **`cameras.json`**, instal
 ```
 
 Each `models` entry maps the camera's reported model string to a `resolutions` `class`. The driver ships an embedded copy as a fallback, so it still works if the file is missing.
+
+**Upgrading does not overwrite this file**, so your additions survive. To take a newer shipped table instead, delete `cameras.json` and re-run the installer.
+
+Note this file only describes sensor **geometry**. If the driver cannot *decode* a recent body's RAW at all, that is LibRaw's table, not this one - see [LibRaw version](#libraw-version-and-replacing-it-yourself).
+
+# Credits to 
+ ASCOM library : https://ascom-standards.org/
+
+ DCRaw: https://www.cybercom.net/~dcoffin/dcraw/
+ 
+ LibRaw:  https://www.libraw.org/
+
+not used anymore: 
+ NDCRaw : https://github.com/AerisG222/NDCRaw
+ MedallionScript: https://github.com/madelson/MedallionShell
+
+the lumix Wifi interface protocol is heavily discussed here: https://www.personal-view.com/talks/discussion/6703/control-your-gh3-from-a-web-browser-now-with-video-/p1
 
 # License
 Copyright (c) 2019 < robert hasson robert_hasson@yahoo.com>

@@ -31,16 +31,13 @@ Partial Class SetupDialogForm
         Me.PictureBox1 = New System.Windows.Forms.PictureBox()
         Me.Label3 = New System.Windows.Forms.Label()
         Me.Label4 = New System.Windows.Forms.Label()
-        Me.ButtonTemp = New System.Windows.Forms.Button()
         Me.ToolTip1 = New System.Windows.Forms.ToolTip(Me.components)
         Me.Label1 = New System.Windows.Forms.Label()
         Me.Label2 = New System.Windows.Forms.Label()
         Me.Label5 = New System.Windows.Forms.Label()
         Me.OpenFileDialog1 = New System.Windows.Forms.OpenFileDialog()
-        Me.FolderBrowserDialog1 = New System.Windows.Forms.FolderBrowserDialog()
         Me.Label6 = New System.Windows.Forms.Label()
         Me.CBResolution = New System.Windows.Forms.ComboBox()
-        Me.TBTempPath = New System.Windows.Forms.TextBox()
         Me.CBReadoutMode = New System.Windows.Forms.ComboBox()
         Me.CBShutterSpeed = New System.Windows.Forms.ComboBox()
         Me.CBISO = New System.Windows.Forms.ComboBox()
@@ -93,7 +90,7 @@ Partial Class SetupDialogForm
         Me.PictureBox1.Anchor = CType((System.Windows.Forms.AnchorStyles.Top Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
         Me.PictureBox1.Cursor = System.Windows.Forms.Cursors.Hand
         Me.PictureBox1.Image = Global.ASCOM.Lumix.My.Resources.Resources.ASCOM
-        Me.PictureBox1.Location = New System.Drawing.Point(364, 287)
+        Me.PictureBox1.Location = New System.Drawing.Point(330, 200)
         Me.PictureBox1.Margin = New System.Windows.Forms.Padding(4, 4, 4, 4)
         Me.PictureBox1.Name = "PictureBox1"
         Me.PictureBox1.Size = New System.Drawing.Size(48, 56)
@@ -119,22 +116,6 @@ Partial Class SetupDialogForm
         Me.Label4.Size = New System.Drawing.Size(333, 34)
         Me.Label4.TabIndex = 0
         Me.Label4.Text = "Set the Camera to Manual" & Global.Microsoft.VisualBasic.ChrW(13) & Global.Microsoft.VisualBasic.ChrW(10) & "Connect to the WIFI network in remote control mode"
-        '
-        'ButtonTemp
-        '
-        Me.ButtonTemp.AccessibleDescription = "this is where the files from the camera are stored (JPGor RAW) while trnasorming " &
-    "to tiff and then passed on to the calling program as an imagearray. the files ar" &
-    "e automatically deleted after each step"
-        Me.ButtonTemp.Location = New System.Drawing.Point(12, 334)
-        Me.ButtonTemp.Margin = New System.Windows.Forms.Padding(3, 4, 3, 4)
-        Me.ButtonTemp.Name = "ButtonTemp"
-        Me.ButtonTemp.Size = New System.Drawing.Size(147, 23)
-        Me.ButtonTemp.TabIndex = 6
-        Me.ButtonTemp.Text = "Path to temp folder"
-        Me.ToolTip1.SetToolTip(Me.ButtonTemp, "this is where the files from the camera are stored (JPGor RAW) while trnasorming " &
-        "to tiff and then passed on to the calling program as an imagearray. the files ar" &
-        "e automatically deleted after each step")
-        Me.ButtonTemp.UseVisualStyleBackColor = True
         '
         'ToolTip1
         '
@@ -201,16 +182,6 @@ Partial Class SetupDialogForm
         Me.CBResolution.Size = New System.Drawing.Size(121, 24)
         Me.CBResolution.TabIndex = 2
         Me.CBResolution.Text = Global.ASCOM.Lumix.My.MySettings.Default.Resolution
-        '
-        'TBTempPath
-        '
-        Me.TBTempPath.DataBindings.Add(New System.Windows.Forms.Binding("Text", Global.ASCOM.Lumix.My.MySettings.Default, "TempPath", True, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged))
-        Me.TBTempPath.Location = New System.Drawing.Point(12, 369)
-        Me.TBTempPath.Margin = New System.Windows.Forms.Padding(3, 4, 3, 4)
-        Me.TBTempPath.Name = "TBTempPath"
-        Me.TBTempPath.Size = New System.Drawing.Size(267, 22)
-        Me.TBTempPath.TabIndex = 7
-        Me.TBTempPath.Text = Global.ASCOM.Lumix.My.MySettings.Default.TempPath
         '
         'CBReadoutMode
         '
@@ -304,11 +275,9 @@ Partial Class SetupDialogForm
         Me.Controls.Add(Me.Label8)
         Me.Controls.Add(Me.Label7)
         Me.Controls.Add(Me.CBResolution)
-        Me.Controls.Add(Me.TBTempPath)
         Me.Controls.Add(Me.CBReadoutMode)
         Me.Controls.Add(Me.CBShutterSpeed)
         Me.Controls.Add(Me.CBISO)
-        Me.Controls.Add(Me.ButtonTemp)
         Me.Controls.Add(Me.Label4)
         Me.Controls.Add(Me.CBCameraIPAddress)
         Me.Controls.Add(Me.chkTrace)
@@ -341,7 +310,6 @@ Partial Class SetupDialogForm
     Friend WithEvents CBCameraIPAddress As ComboBox
     Private WithEvents Label3 As Label
     Friend WithEvents Label4 As Label
-    Friend WithEvents ButtonTemp As Button
     Friend WithEvents OpenFileDialog1 As OpenFileDialog
     Friend WithEvents ToolTip1 As ToolTip
     Friend WithEvents CBISO As ComboBox
@@ -350,8 +318,6 @@ Partial Class SetupDialogForm
     Private WithEvents Label1 As Label
     Private WithEvents Label2 As Label
     Private WithEvents Label5 As Label
-    Friend WithEvents TBTempPath As TextBox
-    Friend WithEvents FolderBrowserDialog1 As FolderBrowserDialog
     Friend WithEvents CBResolution As ComboBox
     Private WithEvents Label6 As Label
     Friend WithEvents Label7 As Label

@@ -1,18 +1,28 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
 
 namespace ASCOM.Lumix.Usb
 {
-    /// <summary>Result of a capture.</summary>
+    /// <summary>
+    /// Result of a capture. The frame is handed back <em>in memory</em>: the SDK already
+    /// delivers the whole object into a managed buffer, so writing it to a temporary file
+    /// only to have the decoder read it straight back was a pure round-trip - ~24 MB of
+    /// write+read per RAW frame, plus a temp folder to configure and clean up.
+    /// </summary>
     public sealed class CaptureResult
     {
         public bool Success;
         public uint Format;        // NativeMethods.OBJ_FORMAT_* (1=JPEG, 2=RAW)
-        public string FilePath;
+        public byte[] Data;        // the encoded RW2/JPEG bytes exactly as the camera sent them
         public string Error;
+
+        // Phase timings, so a slow frame can be attributed rather than guessed at.
+        public long MsSetup;       // putting the body into BULB (bulb captures only)
+        public long MsExpose;      // shutter open
+        public long MsTransfer;    // shutter close -> whole object in memory
     }
 
     /// <summary>
@@ -47,7 +57,6 @@ namespace ASCOM.Lumix.Usb
         public string LastError { get; private set; }
 
         private readonly ManualResetEventSlim _captureDone = new ManualResetEventSlim(false);
-        private string _captureDir;
         private CaptureResult _result;
 
         private readonly List<double> _ssSeconds = new List<double>();
@@ -174,17 +183,23 @@ namespace ASCOM.Lumix.Usb
         }
 
         /// <summary>One-shot exposure (≤ the camera's discrete list; Standard or Extended).</summary>
-        public CaptureResult CaptureOneShot(string outputDir, int timeoutMs)
+        public CaptureResult CaptureOneShot(int timeoutMs)
         {
             if (!_connected) throw new InvalidOperationException("Not connected.");
             lock (_opGate)   // Disconnect must not close the session under this
             {
-                BeginCapture(outputDir);
+                BeginCapture();
                 var rc = MakeRecCtrl(NativeMethods.TAG_RELEASE_ONESHOT);
                 uint err;
                 if (NativeMethods.Rec_Ctrl_Release(ref rc, out err) == 0)
                     return new CaptureResult { Success = false, Error = $"Rec_Ctrl_Release failed (err 0x{err:X8})." };
-                return AwaitObject(timeoutMs);
+                // One-shot has no BULB setup and the shutter time is the body's own, so
+                // everything lands in the transfer figure - shutter open plus delivery.
+                var swXfer = Stopwatch.StartNew();
+                var r = AwaitObject(timeoutMs);
+                swXfer.Stop();
+                if (r != null) r.MsTransfer = swXfer.ElapsedMilliseconds;
+                return r;
             }
         }
 
@@ -192,14 +207,17 @@ namespace ASCOM.Lumix.Usb
         /// Bulb exposure of <paramref name="seconds"/> (Extended only): SS=BULB, open the
         /// shutter, hold, close+finalize. Supports arbitrary durations (&gt;60 s).
         /// </summary>
-        public CaptureResult CaptureBulb(string outputDir, double seconds, int timeoutMs)
+        public CaptureResult CaptureBulb(double seconds, int timeoutMs)
         {
             if (!_connected) throw new InvalidOperationException("Not connected.");
             if (!NativeMethods.Extended) return new CaptureResult { Success = false, Error = "Bulb requires Extended (Tether) mode." };
             lock (_opGate)   // Disconnect must not close the session under this
             {
-                BeginCapture(outputDir);
-                if (!EnsureBulb()) return new CaptureResult { Success = false, Error = "Could not put the camera into BULB." };
+                BeginCapture();
+                var swSetup = Stopwatch.StartNew();
+                bool bulbOk = EnsureBulb();
+                swSetup.Stop();
+                if (!bulbOk) return new CaptureResult { Success = false, Error = "Could not put the camera into BULB." };
 
                 uint err;
                 var open = MakeRecCtrl(NativeMethods.TAG_BULB_START);
@@ -208,6 +226,7 @@ namespace ASCOM.Lumix.Usb
 
                 // Sleep in slices so an abort ends the exposure promptly instead of
                 // making a client wait out a long bulb before it can disconnect.
+                var swExpose = Stopwatch.StartNew();
                 var until = DateTime.UtcNow.AddSeconds(Math.Max(0, seconds));
                 while (!_abortRequested && DateTime.UtcNow < until)
                     Thread.Sleep(Math.Min(200, Math.Max(1, (int)(until - DateTime.UtcNow).TotalMilliseconds)));
@@ -216,14 +235,35 @@ namespace ASCOM.Lumix.Usb
                 NativeMethods.Rec_Ctrl_Release(ref stop, out err);
                 var fin = MakeRecCtrl(NativeMethods.TAG_BULB_FINALIZE);
                 NativeMethods.Rec_Ctrl_Release(ref fin, out err);
+                swExpose.Stop();
                 if (_abortRequested) return new CaptureResult { Success = false, Error = "Aborted." };
-                return AwaitObject(timeoutMs);
+                var swXfer = Stopwatch.StartNew();
+                var r = AwaitObject(timeoutMs);
+                swXfer.Stop();
+                if (r != null)
+                {
+                    r.MsSetup = swSetup.ElapsedMilliseconds;
+                    r.MsExpose = swExpose.ElapsedMilliseconds;
+                    r.MsTransfer = swXfer.ElapsedMilliseconds;
+                }
+                return r;
             }
         }
 
         // Refresh the SS range so BULB (0xFFFFFFFF) sticks instead of clamping to 60 s.
         private bool EnsureBulb()
         {
+            // Ask first. The body keeps BULB between exposures, so on every frame after
+            // the first this is already true - and the loop below unconditionally slept
+            // 250 ms + 150 ms before it ever checked, making a settled camera pay 400 ms
+            // of pure waiting on each and every bulb exposure.
+            {
+                uint e0;
+                int already;
+                if (NativeMethods.SS_Get_Param(out already, out e0) != 0 && (uint)already == NativeMethods.SS_BULB)
+                    return true;
+            }
+
             for (int attempt = 0; attempt < 5; attempt++)
             {
                 uint e;
@@ -259,9 +299,8 @@ namespace ASCOM.Lumix.Usb
             catch { }
         }
 
-        private void BeginCapture(string outputDir)
+        private void BeginCapture()
         {
-            _captureDir = outputDir;
             _result = null;
             _abortRequested = false;
             LastError = null;
@@ -312,10 +351,10 @@ namespace ASCOM.Lumix.Usb
             byte gr = NativeMethods.Get_Object(objectHandle, ref buffer[0], size, out err);
             if (gr == 0 || !IsKnownImageHeader(buffer)) { NativeMethods.Skip_Object_Transfer(objectHandle, out err); return; }
 
-            string ext = format == NativeMethods.OBJ_FORMAT_JPEG ? ".jpg" : ".rw2";
-            string path = Path.Combine(_captureDir ?? Path.GetTempPath(), "usbcap" + ext);
-            try { File.WriteAllBytes(path, buffer); _result = new CaptureResult { Success = true, Format = format, FilePath = path }; }
-            catch (Exception ex) { _result = new CaptureResult { Success = false, Error = "Write failed: " + ex.Message }; }
+            // Hand the bytes straight back. LibRaw decodes from memory (libraw_open_buffer)
+            // and System.Drawing decodes a JPEG from a MemoryStream, so nothing downstream
+            // needs a path - see CaptureResult.
+            _result = new CaptureResult { Success = true, Format = format, Data = buffer };
             _captureDone.Set();
         }
 

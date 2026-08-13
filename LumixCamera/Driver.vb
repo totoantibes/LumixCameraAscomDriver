@@ -508,7 +508,12 @@ Public Class Camera
     ''' a hand-edited profile value does not.
     ''' </summary>
     Private Shared Function NormalisePath(p As String) As String
-        If String.IsNullOrEmpty(p) Then Return p
+        ' An unset temp folder used to be returned as-is, and the download then built its
+        ' filenames as "" & name - a bare relative name, written into whatever the host
+        ' application's working directory happens to be (NINA's install folder, say).
+        ' A fresh profile is exactly this state, and it is reached without the user doing
+        ' anything wrong: connecting without opening the setup dialog first.
+        If String.IsNullOrWhiteSpace(p) Then Return NormalisePath(IO.Path.GetTempPath())
         If p.EndsWith(IO.Path.DirectorySeparatorChar) OrElse p.EndsWith(IO.Path.AltDirectorySeparatorChar) Then Return p
         Return p & IO.Path.DirectorySeparatorChar
     End Function
@@ -547,6 +552,7 @@ Public Class Camera
                 End If
                 TempPath = NormalisePath(My.Settings.TempPath)
                 CurrentSpeed = My.Settings.Speed
+                LogLibRawVersion()
                 ' Resolve and clamp BEFORE assigning: TransferFormat can be unset or stale,
                 ' and IndexOf then returns -1. Assigning that to the property first and
                 ' checking afterwards pushes -1 through the setter, which indexes ROM()
@@ -1166,26 +1172,40 @@ Public Class Camera
                 Return cameraImageArray
             End If
             CurrentState = CameraStates.cameraDownload
-            Dim Tiffimagefile As IO.FileStream
-            Tiffimagefile = New FileStream(TiffFileName, IO.FileMode.Open)
-            ReDim cameraImageArray(cameraNumX - 1, cameraNumY - 1) ' there are 3 channels: RVB. 
+            ReDim cameraImageArray(cameraNumX - 1, cameraNumY - 1) ' there are 3 channels: RVB.
 
-            Dim decoder As New TiffBitmapDecoder(Tiffimagefile, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.Default)
+            ' Pixels come either straight from LibRaw (RAW, decoded in memory) or from the
+            ' TIFF the JPG path still produces. Both are 8-bit BGR, so everything below is
+            ' the same code it always was.
             Dim stride As Int32
             Dim index As Int32
-            Dim bitmapSource As BitmapSource = decoder.Frames(0)
-            Dim bytesPerPixel As UShort
-            bytesPerPixel = bitmapSource.Format.BitsPerPixel / 8
-            stride = bitmapSource.PixelWidth * bytesPerPixel
+            Dim pixels As Byte()
+            Dim srcW As Integer, srcH As Integer
+            Dim Tiffimagefile As IO.FileStream = Nothing
+            If _rgbPixels IsNot Nothing Then
+                pixels = _rgbPixels
+                stride = _rgbStride
+                srcW = _rgbW
+                srcH = _rgbH
+            Else
+                Tiffimagefile = New FileStream(TiffFileName, IO.FileMode.Open)
+                Dim decoder As New TiffBitmapDecoder(Tiffimagefile, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.Default)
+                Dim bitmapSource As BitmapSource = decoder.Frames(0)
+                Dim bytesPerPixel As UShort = bitmapSource.Format.BitsPerPixel / 8
+                stride = bitmapSource.PixelWidth * bytesPerPixel
+                srcW = bitmapSource.PixelWidth
+                srcH = bitmapSource.PixelHeight
+                ReDim pixels(srcH * stride * 2)
+                bitmapSource.CopyPixels(pixels, stride, 0)
+            End If
+
             ' Clamp the copy to the smaller of the table size and the decoded image
             ' (the JPG/thumb is often smaller), so we never index past the pixel
             ' buffer or the output array.
-            Dim imgW As Integer = Math.Min(cameraNumX, bitmapSource.PixelWidth)
-            Dim imgH As Integer = Math.Min(cameraNumY, bitmapSource.PixelHeight)
+            Dim imgW As Integer = Math.Min(cameraNumX, srcW)
+            Dim imgH As Integer = Math.Min(cameraNumY, srcH)
 
             If ReadoutIsRaw() Then  'RAW
-                Dim pixels(bitmapSource.PixelHeight * stride * 2) As Byte
-                bitmapSource.CopyPixels(pixels, stride, 0)
                 For y = 0 To (imgH - 2)
                     For x = 0 To (imgW - 2)
                         index = x * 3 + (y * stride)
@@ -1198,13 +1218,11 @@ Public Class Camera
                     y += 1
                 Next y
             Else
-                Dim pixels(bitmapSource.PixelHeight * stride) As Byte
-                bitmapSource.CopyPixels(pixels, stride, 0)
                 For y = 0 To (imgH - 2)
                     For x = 0 To (imgW - 2)
                         index = x * 3 + (y * stride)
-                        cameraImageArray(x, y) = pixels(index + 2) * 256 'R 
-                        cameraImageArray(x + 1, y + 1) = pixels(index) * 256 'B 
+                        cameraImageArray(x, y) = pixels(index + 2) * 256 'R
+                        cameraImageArray(x + 1, y + 1) = pixels(index) * 256 'B
                         cameraImageArray(x + 1, y) = pixels(index + 1) * 256 'G
                         cameraImageArray(x, y + 1) = pixels(index + 1) * 256 'G
                         x += 1
@@ -1215,9 +1233,14 @@ Public Class Camera
 
             End If
 
+            ' The in-memory frame is a managed array - nothing to close or delete. Drop the
+            ' reference so a second exposure cannot serve the previous frame's pixels.
+            _rgbPixels = Nothing
             Try
-                Tiffimagefile.Dispose() 'cleaning up aftermyself and removing the Tiff file once it is used
-                My.Computer.FileSystem.DeleteFile(TiffFileName)
+                If Tiffimagefile IsNot Nothing Then
+                    Tiffimagefile.Dispose() 'cleaning up aftermyself and removing the Tiff file once it is used
+                    My.Computer.FileSystem.DeleteFile(TiffFileName)
+                End If
             Catch e As Exception
                 TL.LogMessage("ImageArray Get", "error in deleting the imagefile")
             End Try
@@ -1240,6 +1263,13 @@ Public Class Camera
                 TL.LogMessage("ImageArrayVariant Get", "Throwing InvalidOperationException because of a call to ImageArrayVariant before the first image has been taken!")
                 Throw New ASCOM.InvalidOperationException("Call to ImageArrayVariant before the first image has been taken!")
             End If
+            ' Already built for this exposure - hand back the same array, exactly as
+            ' ImageArray does. This used to rebuild ~10 million boxed values on EVERY read,
+            ' so a client that read the variant twice paid the full cost twice.
+            If cameraImageArrayVariant IsNot Nothing Then
+                TL.LogMessage("ImageArrayVariant Get", "returning the variant array already built for this exposure")
+                Return cameraImageArrayVariant
+            End If
             CurrentState = CameraStates.cameraDownload
             ' A client may read the variant without reading ImageArray first; build it
             ' then, rather than dereferencing a Nothing array (which surfaced as a raw
@@ -1247,13 +1277,18 @@ Public Class Camera
             If cameraImageArray Is Nothing Then
                 Dim ignored As Object = Me.ImageArray
             End If
+
+            ' Array.Copy does the Integer -> Object boxing element by element in native
+            ' code. The nested VB loop this replaces did the same work with two bounds
+            ' checks and a 2-D index computation per pixel, and on a 10.2 MPix frame it
+            ' took ~15 s - past the 10 s ConformU allows for ImageArrayVariant, which
+            ' failed validation and aborted the rest of the run.
+            Dim sw As System.Diagnostics.Stopwatch = System.Diagnostics.Stopwatch.StartNew()
             ReDim cameraImageArrayVariant(cameraNumX - 1, cameraNumY - 1)
-            For i As Integer = 0 To cameraNumY - 1
-                For j As Integer = 0 To cameraNumX - 1
-                    cameraImageArrayVariant(j, i) = cameraImageArray(j, i)
-                Next
-            Next
-            TL.LogMessage("ImageArray Variant Get", "getting the Array Variant")
+            Array.Copy(cameraImageArray, cameraImageArrayVariant, cameraImageArray.Length)
+            sw.Stop()
+            TL.LogMessage("ImageArrayVariant Get",
+                          "built " & cameraNumX & "x" & cameraNumY & " variant array in " & sw.ElapsedMilliseconds & " ms")
             CurrentState = CameraStates.cameraIdle
             Return cameraImageArrayVariant
         End Get
@@ -1483,9 +1518,36 @@ Public Class Camera
     End Property
 
     ' The camera reports err_busy on get_content_info until it has finished writing the
-    ' frame; ~20s is comfortably longer than a RAW commit observed on a GH5S over WiFi.
-    Private Const CONTENT_READY_WAIT_MS As Integer = 500
-    Private Const CONTENT_READY_RETRIES As Integer = 40
+    ' frame. The total budget stays ~20s - comfortably longer than a RAW commit observed
+    ' on a GH5S over WiFi - but polled at 150ms rather than 500ms: the wait ends whenever
+    ' the camera is ready, so a coarse interval just adds up to 500ms of pure idling to
+    ' every exposure. This sits directly between the shutter closing and the download
+    ' starting, so it is dead time on every single frame.
+    Private Const CONTENT_READY_WAIT_MS As Integer = 150
+    Private Const CONTENT_READY_RETRIES As Integer = 130
+
+    ' The DLNA ContentDirectory can flap (HTTP 500 / UPnP 701 "No such object" /
+    ' an empty list) while it reindexes, or when the card holds files it cannot
+    ' serve (foreign RAW such as Sony .ARW, which cam.cgi still counts); retry the
+    ' browse a few times before giving up.
+    Private Const BROWSE_RETRIES As Integer = 8
+
+    ' Same reasoning for the playmode switch that precedes the content browse: the camera
+    ' rejects it while it is still committing the frame, so the loop around it is a
+    ' readiness poll. 250ms x 24 keeps the ~6s ceiling the old 1000ms x 5 gave.
+    Private Const PLAYMODE_WAIT_MS As Integer = 250
+    Private Const PLAYMODE_RETRIES As Integer = 24
+
+    ' WiFi image download tuning. RAW (RW2, ~18 MB) over the camera's own access point
+    ' cannot finish inside the old flat 30 s wall-clock cap - at the ~0.4 MB/s the body
+    ' streams that is a ~47 s transfer - and the camera tends to serve the object in
+    ' bounded chunks, closing the stream early. So the download resumes with a byte Range
+    ' until it has the whole Content-Length, bounded by an overall ceiling and a
+    ' no-progress bailout rather than a fixed wall clock.
+    Private Const DOWNLOAD_RESPONSE_TIMEOUT_MS As Integer = 20000 ' cap on GetResponse()
+    Private Const DOWNLOAD_STALL_MS As Integer = 15000           ' ReadWriteTimeout: a mid-stream stall throws (and resumes) instead of blocking
+    Private Const DOWNLOAD_MAX_MS As Integer = 180000            ' overall ceiling for one frame's download
+    Private Const DOWNLOAD_MAX_NOPROGRESS As Integer = 5         ' consecutive zero-byte attempts before giving up
 
     Private Function NumberPix() As String
         Dim response As String = SendLumixMessage(NUMPIX)
@@ -1511,14 +1573,17 @@ Public Class Camera
     'typically num is 1 but was useful to have it as a variable when building the dialogue
     'got some issues with dealing the various XML formats so in the end the response from the camerais turned into a string but inside it is an XML...
 
-    Private Function GetPix(num As Int16) As String
-        SendLumixMessage(PLAYMODE)
-        Dim Start As Int16 = 0
+    ''' <param name="ensurePlaymode">
+    ''' Send PLAYMODE before browsing. The normal readout path has just done that itself,
+    ''' so it passes False; the download-resume path calls this precisely to nudge the
+    ''' camera back into playmode and needs it.
+    ''' </param>
+    Private Function GetPix(num As Int16, Optional ensurePlaymode As Boolean = True) As String
+        If ensurePlaymode Then SendLumixMessage(PLAYMODE)
         ' Right after a capture the camera answers get_content_info with
         ' <result>err_busy</result> while it is still committing the file - longest for
         ' RAW. NumberPix() then returns "", and 'NumPix - num' threw
-        ' InvalidCastException ("" -> Double). Wait for a real count instead; give up
-        ' with "" so the caller raises a proper DriverException.
+        ' InvalidCastException ("" -> Double). Wait for a real count instead.
         Dim NumPix As String = NumberPix()
         Dim waits As Integer = 0
         Do While String.IsNullOrEmpty(NumPix) AndAlso waits < CONTENT_READY_RETRIES
@@ -1526,69 +1591,88 @@ Public Class Camera
             waits += 1
             NumPix = NumberPix()
         Loop
-        If String.IsNullOrEmpty(NumPix) Then Return ""
-        Dim total As Integer
-        If Not Integer.TryParse(NumPix, total) Then Return ""
-        Dim SoapMsg As String = SoapEnvelop(Math.Max(total - num, 0), num)
-        Dim Stream As System.IO.StreamWriter
-        Dim HTTPReq As HttpWebRequest
+        ' camCount is cam.cgi's view of the card. It is only a HINT for indexing the
+        ' DLNA browse: the DLNA ContentDirectory keeps its own, frequently different
+        ' count (RAW+JPG pairing, videos, or files it won't enumerate - foreign RAW
+        ' such as Sony .ARW that cam.cgi still counts). Indexing the browse by cam.cgi's
+        ' number overshoots the DLNA range and returns an empty list, which used to
+        ' surface downstream as a NullReferenceException. -1 means
+        ' cam.cgi never answered; the DLNA TotalMatches below then carries the browse.
+        Dim camCount As Integer = -1
+        Integer.TryParse(NumPix, camCount)
 
-        HTTPReq = WebRequest.Create("http://" + IPAddress + CDS_Control)
-        HTTPReq.ContentType = "text/xml; charset=""utf-8"""
-        HTTPReq.Method = "POST"
-        HTTPReq.Accept = "text/xml"
-        HTTPReq.Headers.Add("soapaction", "urn:schemas-upnp-org:service:ContentDirectory:1#Browse")
-
-        Stream = New StreamWriter(HTTPReq.GetRequestStream(), Encoding.UTF8)
-        Stream.Write(SoapMsg)
-        Stream.Flush()
-        Stream.Close()
-
-        Dim myStreamReader As StreamReader
-        Dim statusCode As HttpStatusCode
-        Dim ResponseText As String
-
-        Try
-            Dim myWebResponse = CType(HTTPReq.GetResponse(), HttpWebResponse)
-            myStreamReader = New StreamReader(myWebResponse.GetResponseStream())
-            If myWebResponse.StatusCode = HttpStatusCode.Accepted Or myWebResponse.StatusCode = 200 Then
-                ResponseText = myStreamReader.ReadToEnd
-                Dim answer As String = ResponseText.Replace("&amp;", "&").Replace("&apos;", "'").Replace("&quot;", """").Replace("&lt;", "<").Replace("&gt;", ">")
-                Return answer
-
-            Else
-                Return ""
+        ' Browse with a few retries: the DLNA server can transiently answer 500 /
+        ' UPnP 701 / an empty list while it reindexes. Aim at cam.cgi's count first
+        ' (correct when the two services agree, which is the common case), and if that
+        ' comes back short, re-aim off the DLNA server's OWN TotalMatches.
+        For attempt As Integer = 1 To BROWSE_RETRIES
+            Dim body As String = ""
+            If camCount >= 0 Then body = DoBrowse(Math.Max(camCount - num, 0), num)
+            Dim returned As Integer = ParseIntTag(body, "NumberReturned")
+            Dim dlnaTotal As Integer = ParseIntTag(body, "TotalMatches")
+            If returned < num AndAlso dlnaTotal > 0 AndAlso dlnaTotal <> camCount Then
+                TL.LogMessage("GetPix", "cam.cgi count " & camCount & " <> DLNA TotalMatches " & dlnaTotal & " - re-aiming browse")
+                body = DoBrowse(Math.Max(dlnaTotal - num, 0), num)
+                returned = ParseIntTag(body, "NumberReturned")
             End If
-        Catch e As WebException
-            If (e.Status = WebExceptionStatus.ProtocolError) Then
-                Dim response As WebResponse = e.Response
-                Using (response)
-                    Dim httpResponse As HttpWebResponse = CType(response, HttpWebResponse)
-                    statusCode = httpResponse.StatusCode
-                    Try
-                        myStreamReader = New StreamReader(response.GetResponseStream())
-                        Using (myStreamReader)
-                            ResponseText = myStreamReader.ReadToEnd & "Status Description = " & httpResponse.StatusDescription ' HttpWebResponse.StatusDescription
-                            Return ""
-                        End Using
-                    Catch ex As Exception
-                        'TL.LogMessage("Message" + LumixMessage + " Sent Failed", LumixMessage + " failed")
-                    End Try
+            If returned >= num AndAlso Not String.IsNullOrEmpty(body) Then Return body
+            TL.LogMessage("GetPix", "browse attempt " & attempt & "/" & BROWSE_RETRIES & " returned " & returned & " item(s) (camCount=" & camCount & ")")
+            Thread.Sleep(CONTENT_READY_WAIT_MS)
+        Next
+        Return "" ' caller raises a clean DriverException on empty
+    End Function
+
+    ' One DLNA ContentDirectory Browse. Returns the entity-decoded SOAP body, or "" on
+    ' any transport/HTTP error - including the 500 / UPnP-701 the camera throws while
+    ' reindexing - so the caller can retry or re-aim rather than crash.
+    Private Function DoBrowse(start As Integer, count As Integer) As String
+        Try
+            Dim HTTPReq As HttpWebRequest = WebRequest.Create("http://" + IPAddress + CDS_Control)
+            HTTPReq.ContentType = "text/xml; charset=""utf-8"""
+            HTTPReq.Method = "POST"
+            HTTPReq.Accept = "text/xml"
+            HTTPReq.Headers.Add("soapaction", "urn:schemas-upnp-org:service:ContentDirectory:1#Browse")
+            Using rs As New StreamWriter(HTTPReq.GetRequestStream(), Encoding.UTF8)
+                rs.Write(SoapEnvelop(start, count))
+            End Using
+            Dim resp As HttpWebResponse = CType(HTTPReq.GetResponse(), HttpWebResponse)
+            If resp.StatusCode = HttpStatusCode.Accepted OrElse resp.StatusCode = HttpStatusCode.OK Then
+                Using sr As New StreamReader(resp.GetResponseStream())
+                    Dim text As String = sr.ReadToEnd()
+                    Return text.Replace("&amp;", "&").Replace("&apos;", "'").Replace("&quot;", """").Replace("&lt;", "<").Replace("&gt;", ">")
                 End Using
             End If
             Return ""
+        Catch e As WebException
+            ' ProtocolError carries the camera's 500/701 body; we only need to know it
+            ' failed so the caller can retry.
+            TL.LogMessage("DoBrowse", "browse " & start & "/" & count & " failed: " & e.Message)
+            Return ""
         End Try
+    End Function
+
+    ' Pull an integer SOAP-envelope tag (NumberReturned / TotalMatches) out of a browse
+    ' response. -1 when absent so callers can distinguish "0 items" from "no answer".
+    Private Shared Function ParseIntTag(xml As String, tag As String) As Integer
+        If String.IsNullOrEmpty(xml) Then Return -1
+        Dim m = System.Text.RegularExpressions.Regex.Match(xml, "<" & tag & ">(\d+)</" & tag & ">")
+        If m.Success Then Return CInt(m.Groups(1).Value)
+        Return -1
     End Function
 
 
 
     'formats a message to be sent to the maera
-    Public Function SendLumixMessage(LumixMessage As String) As String
+    Public Function SendLumixMessage(LumixMessage As String, Optional timeoutMs As Integer = 0) As String
         ' No IP configured yet (e.g. a host connected without opening setup):
         ' don't build an invalid "http:///..." URI, which throws an *uncaught*
         ' UriFormatException. Just no-op with an empty response.
         If String.IsNullOrEmpty(IPAddress) Then Return ""
         Dim request = WebRequest.Create("http://" + IPAddress + "/" + LumixMessage)
+        ' A slow or unresponsive camera must not freeze a caller running on the UI thread -
+        ' e.g. Live View close sending "stopstream". Default WebRequest.Timeout is 100 s; an
+        ' explicit short timeout caps the wait when the caller passes one.
+        If timeoutMs > 0 Then request.Timeout = timeoutMs
         Dim myStreamReader As StreamReader
         Dim SendStatus As Integer = -1
         Dim statusCode As HttpStatusCode
@@ -1640,7 +1724,10 @@ Public Class Camera
         Try
             UsbTransport.Connect(My.Settings.ConnectionMode = "USBExtended")
             MODEL = UsbTransport.ModelName
-            TempPath = My.Settings.TempPath
+            ' No TempPath over USB: the frame is decoded from memory and the only file
+            ' produced is our own TIFF, which goes to the system temp area. The setup
+            ' dialog's temp folder applies to the WiFi download path only.
+            LogLibRawVersion()
             Dim w As Integer, h As Integer, p As Double
             UsbTransport.GetSpecs(MODEL, w, h, p)
             ccdWidth = w : ccdHeight = h
@@ -1671,24 +1758,43 @@ Public Class Camera
     ''' <summary>Background worker: one-shot USB capture -> file -> TIFF -> ImageReady.</summary>
     Private Sub UsbCaptureWorker()
         Try
+            ' Phase timings. Without these the only thing the log shows is "bulb 2s" and,
+            ' fifteen seconds later, "image ready" - which says nothing about whether the
+            ' time went on the camera, the SDK transfer or the decode.
+            Dim swPhase As System.Diagnostics.Stopwatch = System.Diagnostics.Stopwatch.StartNew()
             Dim dur As Double = cameraLastExposureDuration
             Dim res As ASCOM.Lumix.Usb.CaptureResult
-            If UsbTransport.IsExtended AndAlso dur > 1.0 Then
-                ' Extended mode: hold the shutter open for the exact time (bulb), any duration incl. >60s.
+            ' "Bulb" holds the shutter open for the exact requested time (Extended SDK only);
+            ' "CameraList" snaps a sub-1s exposure to the nearest discrete shutter speed. Any
+            ' exposure over 1s always uses bulb. USB Standard (no bulb) and Wi-Fi (always bulb)
+            ' ignore this setting - the setup dialog greys it out for them.
+            Dim preferBulb As Boolean = String.Equals(My.Settings.SubSecondExposure, "Bulb", StringComparison.OrdinalIgnoreCase)
+            If UsbTransport.IsExtended AndAlso (dur > 1.0 OrElse preferBulb) Then
+                ' Extended: hold the shutter open for the exact time (bulb), any duration incl. >60s.
                 TL.LogMessage("USB capture", "bulb " & dur & "s")
-                res = UsbTransport.CaptureBulb(TempPath, dur, CInt(dur * 1000) + 120000)
+                res = UsbTransport.CaptureBulb(dur, CInt(dur * 1000) + 120000)
             Else
                 ' Snap to the nearest supported discrete shutter speed and fire a one-shot.
                 Dim actual As Double = UsbTransport.SetShutterSeconds(dur)
                 TL.LogMessage("USB capture", "requested " & dur & "s -> nearest " & actual & "s")
-                res = UsbTransport.Capture(TempPath, 90000)
+                ' Report what the camera actually did, not what was asked. LastExposureDuration
+                ' must be the real exposure, or a client's exposure/ADU model breaks when several
+                ' requested values snap to the same shutter speed (e.g. the flat wizard's bisection).
+                cameraLastExposureDuration = actual
+                res = UsbTransport.Capture(90000)
             End If
             If res IsNot Nothing AndAlso res.Success Then
-                ConvertToTiff(res.FilePath, res.Format <> 1) ' format 1 = JPEG, otherwise RAW
-                If Not String.IsNullOrEmpty(TiffFileName) AndAlso IO.File.Exists(TiffFileName) Then
+                Dim msCapture As Long = swPhase.ElapsedMilliseconds
+                TL.LogMessage("USB timing", "total " & msCapture & " ms = setup " & res.MsSetup &
+                              " + expose " & res.MsExpose & " + transfer " & res.MsTransfer &
+                              " ms (" & res.Data.Length & " bytes)")
+                swPhase.Restart()
+                ConvertToTiffFromBuffer(res.Data, res.Format <> 1) ' format 1 = JPEG, otherwise RAW
+                TL.LogMessage("USB timing", "decode " & swPhase.ElapsedMilliseconds & " ms")
+                If HaveDecodedFrame() Then
                     cameraImageReady = True
                     CurrentState = CameraStates.cameraIdle
-                    TL.LogMessage("USB capture", "image ready: " & res.FilePath)
+                    TL.LogMessage("USB capture", "image ready: " & res.Data.Length & " bytes decoded from memory")
                 Else
                     CurrentState = CameraStates.cameraError
                     TL.LogMessage("USB capture", "conversion produced no TIFF")
@@ -1708,37 +1814,148 @@ Public Class Camera
         End Try
     End Sub
 
-    ''' <summary>Convert a captured RW2/JPG file to the TIFF the ImageArray path reads.</summary>
-    Private Sub ConvertToTiff(imagepath As String, isRaw As Boolean)
-        TiffFileName = imagepath.Substring(0, imagepath.Length - 3) & "tif"
+    ''' <summary>
+    ''' Convert a captured frame held in memory to the TIFF the ImageArray path reads.
+    ''' Used by the USB path, where the SDK hands the whole object back as a byte array:
+    ''' LibRaw decodes it with libraw_open_buffer and System.Drawing decodes a JPEG from a
+    ''' MemoryStream, so the capture never touches the disk. That removes a ~24 MB write
+    ''' plus read per RAW frame, the temp folder setting, and the fixed "usbcap" filename
+    ''' two concurrent captures used to collide on.
+    ''' </summary>
+    Private Sub ConvertToTiffFromBuffer(data As Byte(), isRaw As Boolean, Optional count As Integer = -1)
+        If data Is Nothing OrElse data.Length = 0 Then
+            TL.LogMessage("ConvertToTiff", "empty capture buffer")
+            Return
+        End If
+        If count < 0 OrElse count > data.Length Then count = data.Length
+
+        ' The TIFF still goes to disk - ImageArray decodes it with TiffBitmapDecoder - but
+        ' it is ours alone, so it lives in the system temp area under a unique name rather
+        ' than in a user-configured folder.
+        TiffFileName = IO.Path.Combine(IO.Path.GetTempPath(),
+                                       "lumix-" & Guid.NewGuid().ToString("N") & ".tif")
         Try
             If isRaw Then
-                Dim h As IntPtr
-                If IntPtr.Size = 8 Then
-                    h = libraw_init64(1)
-                    libraw_open_file64(h, imagepath)
-                    libraw_unpack64(h)
-                    libraw_set_output_tif64(h, 1)
-                    libraw_dcraw_process64(h)
-                    libraw_dcraw_ppm_tiff_writer64(h, TiffFileName)
-                    libraw_close64(h)
-                Else
-                    h = libraw_init32(1)
-                    libraw_open_file32(h, imagepath)
-                    libraw_unpack32(h)
-                    libraw_set_output_tif32(h, 1)
-                    libraw_dcraw_process32(h)
-                    libraw_dcraw_ppm_tiff_writer32(h, TiffFileName)
-                    libraw_close32(h)
-                End If
+                DecodeRawBuffer(data, count)
+                Return
             Else
-                Dim jpg = Image.FromFile(imagepath)
-                jpg.Save(TiffFileName, System.Drawing.Imaging.ImageFormat.Tiff)
-                jpg.Dispose()
+                ' Image.FromStream keeps using the stream for the life of the Image, so the
+                ' save has to happen before it is disposed.
+                Using ms As New IO.MemoryStream(data, 0, count, writable:=False)
+                    Using jpg = Image.FromStream(ms)
+                        jpg.Save(TiffFileName, System.Drawing.Imaging.ImageFormat.Tiff)
+                    End Using
+                End Using
             End If
-            Try : My.Computer.FileSystem.DeleteFile(imagepath) : Catch : End Try
         Catch ex As Exception
             TL.LogMessage("ConvertToTiff", "failed: " & ex.Message)
+        End Try
+    End Sub
+
+    ' The decoded frame, held as 8-bit BGR exactly as TiffBitmapDecoder used to hand it
+    ' over, so the ImageArray pixel loops are unchanged. Non-Nothing means ImageArray
+    ' should use this instead of opening a TIFF.
+    Private _rgbPixels As Byte()
+    Private _rgbW As Integer
+    Private _rgbH As Integer
+    Private _rgbStride As Integer
+
+    ''' <summary>True once a frame is decoded, whether it came back in memory or as a TIFF.</summary>
+    Private Function HaveDecodedFrame() As Boolean
+        If _rgbPixels IsNot Nothing Then Return True
+        Return Not String.IsNullOrEmpty(TiffFileName) AndAlso IO.File.Exists(TiffFileName)
+    End Function
+
+    ''' <summary>
+    ''' Decode a RAW buffer to pixels without any file at all: libraw_open_buffer in,
+    ''' libraw_dcraw_make_mem_image out. The old route wrote a ~31 MB TIFF and had WPF
+    ''' read it straight back - measured at 303 ms to write plus 1450 ms to decode, all of
+    ''' it avoidable.
+    '''
+    ''' One deliberate behaviour change: WPF applied the sRGB ICC profile LibRaw embeds in
+    ''' that TIFF, so the values handed to the imaging software were colour-managed for a
+    ''' display. make_mem_image returns the processed values directly. For astrophotography
+    ''' that is the more faithful choice - a display transform has no business being baked
+    ''' into measurement data - but it does mean pixel values differ from earlier releases.
+    ''' </summary>
+    ''' <param name="count">
+    ''' Bytes of <paramref name="data"/> that are actually the frame. The WiFi path hands
+    ''' over the MemoryStream's own backing array, which is larger than the download, so
+    ''' the array length is not the file length. -1 means "all of it".
+    ''' </param>
+    Private Sub DecodeRawBuffer(data As Byte(), Optional count As Integer = -1)
+        If count < 0 OrElse count > data.Length Then count = data.Length
+        _rgbPixels = Nothing
+        ' LibRaw does NOT copy the buffer, so it has to stay put until unpack() has read
+        ' it - pin for the whole open/unpack/process sequence.
+        Dim pin As GCHandle = GCHandle.Alloc(data, GCHandleType.Pinned)
+        Dim h As IntPtr = IntPtr.Zero
+        Dim img As IntPtr = IntPtr.Zero
+        Try
+            Dim is64 As Boolean = (IntPtr.Size = 8)
+            Dim rc As Integer = 0
+            Dim sw As System.Diagnostics.Stopwatch = System.Diagnostics.Stopwatch.StartNew()
+            Dim msUnpack As Long, msProcess As Long, msMem As Long
+            If is64 Then
+                h = libraw_init64(1)
+                libraw_open_buffer64(h, pin.AddrOfPinnedObject(), New IntPtr(count))
+                libraw_unpack64(h)
+                msUnpack = sw.ElapsedMilliseconds : sw.Restart()
+                libraw_dcraw_process64(h)
+                msProcess = sw.ElapsedMilliseconds : sw.Restart()
+                img = libraw_dcraw_make_mem_image64(h, rc)
+            Else
+                h = libraw_init32(1)
+                libraw_open_buffer32(h, pin.AddrOfPinnedObject(), New IntPtr(count))
+                libraw_unpack32(h)
+                msUnpack = sw.ElapsedMilliseconds : sw.Restart()
+                libraw_dcraw_process32(h)
+                msProcess = sw.ElapsedMilliseconds : sw.Restart()
+                img = libraw_dcraw_make_mem_image32(h, rc)
+            End If
+            msMem = sw.ElapsedMilliseconds : sw.Restart()
+
+            If img = IntPtr.Zero Then
+                TL.LogMessage("DecodeRawBuffer", "make_mem_image returned nothing (err " & rc & ")")
+                Return
+            End If
+
+            Dim hdr As LibRawProcessedImage = DirectCast(Marshal.PtrToStructure(img, GetType(LibRawProcessedImage)), LibRawProcessedImage)
+            If hdr.colors <> 3 OrElse hdr.bits <> 8 Then
+                TL.LogMessage("DecodeRawBuffer", "unexpected image: colors=" & hdr.colors & " bits=" & hdr.bits)
+                Return
+            End If
+
+            Dim raw(CInt(hdr.data_size) - 1) As Byte
+            Marshal.Copy(img + Marshal.SizeOf(GetType(LibRawProcessedImage)), raw, 0, raw.Length)
+
+            ' make_mem_image gives RGB; the pixel loops below expect the BGR that WPF
+            ' produced from the TIFF (they read index+2 as red). Swap in place rather than
+            ' touching the loops - verified against the old path byte for byte.
+            For i As Integer = 0 To raw.Length - 3 Step 3
+                Dim t As Byte = raw(i)
+                raw(i) = raw(i + 2)
+                raw(i + 2) = t
+            Next
+
+            _rgbPixels = raw
+            _rgbW = hdr.width
+            _rgbH = hdr.height
+            _rgbStride = hdr.width * 3
+            TL.LogMessage("DecodeRawBuffer", _rgbW & "x" & _rgbH & " decoded in memory, no TIFF written")
+            TL.LogMessage("DecodeRawBuffer", "unpack " & msUnpack & " + demosaic " & msProcess &
+                          " + make_mem_image " & msMem & " + copy/swap " & sw.ElapsedMilliseconds & " ms")
+        Catch ex As Exception
+            _rgbPixels = Nothing
+            TL.LogMessage("DecodeRawBuffer", "failed: " & ex.Message)
+        Finally
+            If img <> IntPtr.Zero Then
+                If IntPtr.Size = 8 Then libraw_dcraw_clear_mem64(img) Else libraw_dcraw_clear_mem32(img)
+            End If
+            If h <> IntPtr.Zero Then
+                If IntPtr.Size = 8 Then libraw_close64(h) Else libraw_close32(h)
+            End If
+            pin.Free()
         End Try
     End Sub
 
@@ -1755,6 +1972,7 @@ Public Class Camera
         ' TIFF rather than returning the cached one.
         cameraImageArray = Nothing
         cameraImageArrayVariant = Nothing
+        _rgbPixels = Nothing
         cameraLastExposureDuration = Duration
         exposureStart = DateTime.Now
         If My.Settings.ConnectionMode.StartsWith("USB") Then
@@ -1801,6 +2019,79 @@ Public Class Camera
         ' System.Threading.Thread.Sleep(1000) ' Sleep for 1s after the capture so the camera can breath a bit.
         Return True
     End Function
+
+    ''' <summary>
+    ''' Record which LibRaw actually got loaded. The DLL carries no version resource, so
+    ''' without this a "my RAW will not decode" report cannot be answered without the user
+    ''' hashing the file - and the DLL is deliberately replaceable in place (the driver
+    ''' only calls the flat C API through opaque handles and marshals no LibRaw struct, so
+    ''' dropping in a newer build is safe).
+    ''' </summary>
+    ' Per instance, not per process: each connection writes its own trace file, and the
+    ' whole point is that the file answers "which LibRaw decoded this?" on its own.
+    Private _librawLogged As Boolean
+    Private Sub LogLibRawVersion()
+        If _librawLogged Then Return
+        _librawLogged = True
+        Try
+            Dim p As IntPtr = If(IntPtr.Size = 8, libraw_version64(), libraw_version32())
+            TL.LogMessage("LibRaw", If(p = IntPtr.Zero, "version unavailable", Marshal.PtrToStringAnsi(p)))
+        Catch ex As Exception
+            TL.LogMessage("LibRaw", "version query failed: " & ex.Message)
+        End Try
+    End Sub
+
+    <DllImport("libraw.dll", EntryPoint:="libraw_version", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Function libraw_version64() As IntPtr
+    End Function
+
+    <DllImport("libraw32.dll", EntryPoint:="libraw_version", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Function libraw_version32() As IntPtr
+    End Function
+
+    ' Decode straight from the capture buffer instead of a file. Present since 0.19, so it
+    ' works with both the shipped 64-bit LibRaw and the older 32-bit one. The size argument
+    ' is size_t, hence IntPtr rather than Integer.
+    <DllImport("libraw.dll", EntryPoint:="libraw_open_buffer", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Function libraw_open_buffer64(ByVal libraw_data As IntPtr, ByVal buffer As IntPtr, ByVal size As IntPtr) As <MarshalAs(UnmanagedType.U4)> Int32
+    End Function
+
+    <DllImport("libraw32.dll", EntryPoint:="libraw_open_buffer", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Function libraw_open_buffer32(ByVal libraw_data As IntPtr, ByVal buffer As IntPtr, ByVal size As IntPtr) As <MarshalAs(UnmanagedType.U4)> Int32
+    End Function
+
+    ''' <summary>
+    ''' LibRaw's processed-image header, as returned by libraw_dcraw_make_mem_image. The
+    ''' pixel data follows immediately after it. This is the one LibRaw structure the
+    ''' driver marshals, and it is the stable one - four ushorts and two ints, unchanged
+    ''' since 0.14. libraw_data_t, which does churn between versions, is still never
+    ''' touched, so replacing libraw.dll in place remains safe.
+    ''' </summary>
+    <StructLayout(LayoutKind.Sequential)>
+    Private Structure LibRawProcessedImage
+        Public type As Integer          ' LibRaw_image_formats: 1 = JPEG, 2 = BITMAP
+        Public height As UShort
+        Public width As UShort
+        Public colors As UShort
+        Public bits As UShort
+        Public data_size As UInteger
+    End Structure
+
+    <DllImport("libraw.dll", EntryPoint:="libraw_dcraw_make_mem_image", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Function libraw_dcraw_make_mem_image64(ByVal libraw_data As IntPtr, ByRef errcode As Integer) As IntPtr
+    End Function
+
+    <DllImport("libraw32.dll", EntryPoint:="libraw_dcraw_make_mem_image", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Function libraw_dcraw_make_mem_image32(ByVal libraw_data As IntPtr, ByRef errcode As Integer) As IntPtr
+    End Function
+
+    <DllImport("libraw.dll", EntryPoint:="libraw_dcraw_clear_mem", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Sub libraw_dcraw_clear_mem64(ByVal img As IntPtr)
+    End Sub
+
+    <DllImport("libraw32.dll", EntryPoint:="libraw_dcraw_clear_mem", CallingConvention:=CallingConvention.Cdecl)>
+    Public Shared Sub libraw_dcraw_clear_mem32(ByVal img As IntPtr)
+    End Sub
 
     <DllImport("libraw.dll", EntryPoint:="libraw_init", ThrowOnUnmappableChar:=False, CallingConvention:=CallingConvention.Cdecl)>
     Public Shared Function libraw_init64(ByVal flag As Integer) As <MarshalAs(UnmanagedType.SysUInt)> IntPtr
@@ -1877,7 +2168,10 @@ Public Class Camera
         Dim nRead As Integer
         Dim SendStatus As Integer = -1
         Dim length As Integer = 0
-        Dim buflen As Integer = 1024
+        ' 64 KB, not 1 KB. At 1 KB an 18.7 MB RAW took ~18,300 trips round the read loop,
+        ' each allocating a fresh buffer, taking a timestamp and - worst of all - calling
+        ' Flush() on the file stream, i.e. one forced disk write per kilobyte.
+        Dim buflen As Integer = 65536
 
         cameraImageReady = False
         If cameraAborted Then ' aborted during the exposure wait - don't download
@@ -1899,15 +2193,33 @@ Public Class Camera
                 LookupImgtag = "CAM_LRGTN"
         End Select
         Try
+            ' Phase timings for the WiFi readout, mirroring the USB path - the gap between
+            ' the shutter closing and the first byte arriving used to be ~3 s of unexplained
+            ' HTTP chatter.
+            Dim swWifi As System.Diagnostics.Stopwatch = System.Diagnostics.Stopwatch.StartNew()
+            ' The camera refuses playmode until it has finished writing the frame to its
+            ' card, so this loop is a readiness poll, not a retry. It used to back off a
+            ' flat second between attempts, which rounds the wait up to the next whole
+            ' second: the camera being ready at 2.1 s cost 3 s. Poll four times as often
+            ' for the same ceiling.
+            tries = PLAYMODE_RETRIES
             Do
                 temp = SendLumixMessage(PLAYMODE)   'making sure the camera is in Playmode
                 If temp.Contains("err") Then
-                    Thread.Sleep(1000)
+                    TL.LogMessage("waiting for playmode", swWifi.ElapsedMilliseconds & " ms: " & temp.Trim())
+                    Thread.Sleep(PLAYMODE_WAIT_MS)
                 End If
                 tries -= 1
             Loop While (tries > 0 And temp.Contains("err"))
+            TL.LogMessage("WiFi timing", "playmode " & swWifi.ElapsedMilliseconds & " ms")
+            swWifi.Restart()
 
-            PictureString = GetPix(1)
+            ' The loop above has just put the camera in playmode, so GetPix must not send
+            ' it a second time - every one of these is a full HTTP round-trip to a camera
+            ' on the far end of a wireless link.
+            PictureString = GetPix(1, ensurePlaymode:=False)
+            TL.LogMessage("WiFi timing", "content browse " & swWifi.ElapsedMilliseconds & " ms")
+            swWifi.Restart()
             ' Value comparison, not reference: 'IsNot ""' compares references and is
             ' therefore always True, so GetPix's documented "" failure return sailed
             ' through the guard into XElement.Parse("") and surfaced as
@@ -1920,8 +2232,26 @@ Public Class Camera
                 Throw New ASCOM.DriverException("The camera returned an empty image-list response")
             End If
 
-            Dim items As IEnumerable(Of XElement) =
-        DirectCast(DirectCast(DirectCast(DirectCast(DirectCast(XPictures.FirstNode, System.[Xml].Linq.XContainer).FirstNode, System.[Xml].Linq.XContainer).FirstNode, System.[Xml].Linq.XContainer).FirstNode, System.[Xml].Linq.XContainer).FirstNode, System.[Xml].Linq.XContainer).Elements
+            ' The DIDL-Lite that carries the items sits five nodes deep
+            ' (Envelope>Body>BrowseResponse>Result>DIDL-Lite). If the browse came back
+            ' well-formed but item-less - the camera reindexing, or an index past the
+            ' DLNA range slipping through - one of those FirstNodes is Nothing and this
+            ' chain threw a bare NullReferenceException that told nobody anything. Walk it
+            ' defensively and raise a diagnosable error instead.
+            Dim items As IEnumerable(Of XElement) = Nothing
+            Try
+                Dim node As System.[Xml].Linq.XNode = XPictures.FirstNode
+                For depth As Integer = 1 To 4
+                    node = DirectCast(node, System.[Xml].Linq.XContainer).FirstNode
+                Next
+                items = DirectCast(node, System.[Xml].Linq.XContainer).Elements
+            Catch
+                items = Nothing
+            End Try
+            If items Is Nothing Then
+                TL.LogMessage("ReadImageFromCamera", "browse response had no item list - DLNA content empty or reindexing")
+                Throw New ASCOM.DriverException("The camera returned no browsable image (DLNA content list empty - the card may hold files the camera cannot serve, e.g. foreign RAW such as Sony .ARW, or it is still reindexing). Remove foreign/unreadable files or power-cycle the camera, then retry.")
+            End If
 
             For Each it In items
                 If it.HasAttributes Then
@@ -1936,138 +2266,134 @@ Public Class Camera
 
 
             If Images = "" Then
-                Throw New ASCOM.DriverException
+                Throw New ASCOM.DriverException("No " & LookupImgtag & " resource in the camera's newest content item (wrong readout mode for what is on the card, or that file type is not present).")
             End If
 
-            SendLumixMessage(PLAYMODE)                'making sure the camera is in Playmode
+            ' No PLAYMODE here: the retry loop above set it and the content browse that
+            ' followed cannot have changed it. This was the third identical round-trip in
+            ' a single readout.
             CurrentState = CameraStates.cameraReading
             CurrentPercentCompleted = 0
 
             nRead = 0
 
-            Dim theResponse As HttpWebResponse
-            Dim theRequest As HttpWebRequest
-            Dim bytesread As Integer = 0
-            Dim start_time As DateTime = Now
-            Dim stop_time As DateTime
-            Dim elapsed_time As TimeSpan
+            ' The download lands in memory, not in TempPath. The file used to exist only to
+            ' be handed straight back to the decoder and deleted, costing an ~18.7 MB write
+            ' plus read per RAW frame. The camera serves the object in bounded chunks and
+            ' closes the stream early, so we resume with a byte Range until we have the whole
+            ' Content-Length, bounded by an overall ceiling and a no-progress bailout rather
+            ' than the old flat 30 s wall clock that RAW could never beat.
+            Dim buffer As New IO.MemoryStream(24 * 1024 * 1024)
+            Dim expectedLen As Long = -1    ' Content-Length of the whole object, once known
+            Dim attempts As Integer = 0
+            Dim noProgress As Integer = 0
+            Dim restarts As Integer = 0     ' times the camera ignored Range and served from 0
+            Dim complete As Boolean = False
+
             Do
-                theRequest = HttpWebRequest.Create(Images)
-                TL.LogMessage("reading stream ", Images & " position " & nRead)
+                attempts += 1
+                Dim posBefore As Integer = nRead
+                Dim cleanEof As Boolean = False
+
+                Dim theRequest As HttpWebRequest = DirectCast(HttpWebRequest.Create(Images), HttpWebRequest)
                 theRequest.KeepAlive = True
                 theRequest.ProtocolVersion = HttpVersion.Version11
                 theRequest.ServicePoint.ConnectionLimit = 1
+                theRequest.Timeout = DOWNLOAD_RESPONSE_TIMEOUT_MS
+                theRequest.ReadWriteTimeout = DOWNLOAD_STALL_MS ' a mid-stream stall raises instead of blocking, so we resume
                 If nRead > 0 Then
-                    theRequest.AddRange(nRead)
-                    GetPix(1) 'if the file not found happened then this trick is to get the camera in a readmode again and making sure it remembers the filename
-                    TL.LogMessage("continuing the read where it stopped", Images & " position " & nRead)
-
+                    theRequest.AddRange(nRead)  ' resume from where the previous attempt stopped
+                    GetPix(1)                   ' nudge the camera back into serving this file (it forgets between requests)
                 End If
+                TL.LogMessage("download", "attempt " & attempts & " GET from byte " & nRead & If(nRead > 0, " (range)", ""))
 
+                Dim theResponse As HttpWebResponse = Nothing
                 Try
-                    theResponse = theRequest.GetResponse()
-
+                    theResponse = DirectCast(theRequest.GetResponse(), HttpWebResponse)
                 Catch ex As Exception
-
-                    TL.LogMessage("error in reading stream ", Images & " position " & nRead)
-                    Exit Do
-
+                    TL.LogMessage("download", "GetResponse failed at " & nRead & ": " & ex.Message)
                 End Try
-                Dim writeStream As IO.FileStream
-                writeStream = New FileStream(TempPath & LocalNameFor(Images), IO.FileMode.OpenOrCreate)
-                If nRead > 0 Then
-                    writeStream.Position = nRead
-                End If
 
-                TL.LogMessage("opening or creating  file", Images)
-                Try
-                    Do
+                If theResponse IsNot Nothing Then
+                    Dim status As Integer = CInt(theResponse.StatusCode)
+                    Dim bodyLen As Long = theResponse.ContentLength
+                    If nRead = 0 Then
+                        expectedLen = bodyLen ' first (full) response carries the whole length
+                    ElseIf status = 200 Then
+                        ' The camera ignored our Range and restarted from the top. Appending
+                        ' would duplicate the prefix; if it does this every time, resume is
+                        ' impossible and RAW simply cannot be pulled over WiFi.
+                        restarts += 1
+                        TL.LogMessage("download", "camera ignored Range (HTTP 200 on resume, restart " & restarts & ")")
+                        If restarts > 1 Then
+                            Throw New ASCOM.DriverException("Camera does not honour HTTP Range on RW2 (only " & bodyLen &
+                                " bytes served per request) - RAW cannot be completed over WiFi; use the USB path for RAW.")
+                        End If
+                        buffer.SetLength(0)
+                        nRead = 0
+                        posBefore = 0
+                        expectedLen = bodyLen
+                    End If
+                    TL.LogMessage("download", "HTTP " & status & " bodyLen=" & bodyLen & " total-expected=" & expectedLen)
+
+                    buffer.Position = nRead
+                    Try
                         Dim readBytes(buflen - 1) As Byte
-                        CurrentPercentCompleted = Math.Min(nRead \ 80000, 100) 'assuming a jpg is not longer than 8MB (nRead\80000 avoids the Int32 overflow of 100*nRead on >21MB RAW)
-                        bytesread = theResponse.GetResponseStream.Read(readBytes, 0, buflen)
-
-                        nRead = nRead + bytesread
-                        If bytesread = 0 Then
-                            TL.LogMessage("reached end of stream ", Images & " position " & nRead)
-                            Exit Do
-                        End If
-                        writeStream.Write(readBytes, 0, bytesread)
-                        writeStream.Flush()
-                        stop_time = Now
-                        elapsed_time = stop_time.Subtract(start_time)
-                        If elapsed_time.TotalSeconds > 30 Then
-                            Throw New ASCOM.DriverException
-                        End If
-
-                    Loop
-                    theResponse.GetResponseStream.Close()
-                    writeStream.Flush()
-                    writeStream.Close()
-                    stop_time = Now
-                    elapsed_time = stop_time.Subtract(start_time)
-                    If elapsed_time.TotalSeconds > 30 Then
-                        Throw New ASCOM.DriverException
-                    End If
-
-                Catch e As System.IO.IOException
-                    TL.LogMessage("camera stopped streaming  ", Images & " position  " & nRead)
-                    nRead -= 8 * buflen
-                    theResponse.GetResponseStream.Close()
-                    writeStream.Flush()
-                    writeStream.Close()
-                End Try
-                stop_time = Now
-                elapsed_time = stop_time.Subtract(start_time)
-                If elapsed_time.TotalSeconds > 30 Then
-                    Throw New ASCOM.DriverException
+                        Dim src As IO.Stream = theResponse.GetResponseStream()
+                        Do
+                            Dim n As Integer = src.Read(readBytes, 0, buflen)
+                            If n = 0 Then
+                                cleanEof = True
+                                Exit Do
+                            End If
+                            buffer.Write(readBytes, 0, n)
+                            nRead += n
+                            CurrentPercentCompleted = If(expectedLen > 0, CInt(Math.Min(100L, nRead * 100L \ expectedLen)), Math.Min(nRead \ 80000, 100))
+                        Loop
+                        src.Close()
+                    Catch ioex As Exception
+                        ' ReadWriteTimeout or a mid-stream close lands here; the outer loop resumes.
+                        TL.LogMessage("download", "stream broke at " & nRead & ": " & ioex.Message)
+                    End Try
+                    theResponse.Close()
                 End If
-            Loop While bytesread > 0
 
-            If ReadoutMode = 1 Then 'RAW . needs libraw conversion
-                Try
+                ' Done when we have the whole known length, or the camera signalled a clean
+                ' end and never advertised a length (nothing more is coming).
+                If expectedLen > 0 Then
+                    complete = (nRead >= expectedLen)
+                ElseIf cleanEof Then
+                    complete = True
+                End If
 
-                    Dim imagepath = TempPath & LocalNameFor(Images)
-                    TiffFileName = imagepath.Substring(0, imagepath.Length() - 3) + "tif"
-
-                    Dim libraw_data_t As IntPtr
-
-                    If (IntPtr.Size = 8) Then
-
-                        libraw_data_t = libraw_init64(1)
-                        libraw_open_file64(libraw_data_t, imagepath)
-                        libraw_unpack64(libraw_data_t)
-                        libraw_set_output_tif64(libraw_data_t, 1)
-                        libraw_dcraw_process64(libraw_data_t)
-                        libraw_dcraw_ppm_tiff_writer64(libraw_data_t, TiffFileName)
-                        libraw_close64(libraw_data_t)
+                If Not complete Then
+                    If nRead > posBefore Then
+                        noProgress = 0
                     Else
-                        libraw_data_t = libraw_init32(1)
-                        libraw_open_file32(libraw_data_t, imagepath)
-                        libraw_unpack32(libraw_data_t)
-                        libraw_set_output_tif32(libraw_data_t, 1)
-                        libraw_dcraw_process32(libraw_data_t)
-                        libraw_dcraw_ppm_tiff_writer32(libraw_data_t, TiffFileName)
-                        libraw_close32(libraw_data_t)
+                        noProgress += 1
+                        TL.LogMessage("download", "no progress (" & noProgress & "/" & DOWNLOAD_MAX_NOPROGRESS & ") at byte " & nRead)
+                        If noProgress >= DOWNLOAD_MAX_NOPROGRESS Then
+                            Throw New ASCOM.DriverException("RAW download stalled at " & nRead & " of " & expectedLen & " bytes")
+                        End If
                     End If
-                    My.Computer.FileSystem.DeleteFile(TempPath & LocalNameFor(Images))
-                Catch e As Exception
-                    TL.LogMessage("Converting to tiff via DCRAW", Images & " file not found")
-                End Try
-            Else 'JPG image. VB can translate into TIFF natively
-                Try
+                    If swWifi.ElapsedMilliseconds > DOWNLOAD_MAX_MS Then
+                        Throw New ASCOM.DriverException("RAW download exceeded " & (DOWNLOAD_MAX_MS \ 1000) & "s at " & nRead & " of " & expectedLen & " bytes")
+                    End If
+                End If
+            Loop While Not complete
+            TL.LogMessage("WiFi timing", "download " & swWifi.ElapsedMilliseconds & " ms (" & nRead & " bytes, " & attempts & " attempts)")
+            swWifi.Restart()
 
-                    Dim imagepath = TempPath & LocalNameFor(Images)
-                    Dim jpg = Image.FromFile(imagepath)
-
-                    TiffFileName = imagepath.Substring(0, imagepath.Length() - 3) + "tif"
-                    jpg.Save(TiffFileName, System.Drawing.Imaging.ImageFormat.Tiff)
-                    jpg.Dispose() 'cleaning up aftermyself and removing the jpg file once it is used and transformed into a tiff
-                    My.Computer.FileSystem.DeleteFile(imagepath)
-
-                Catch e As Exception
-                    TL.LogMessage("Converting to tiff via vb", Images & " file not found")
-                End Try
-            End If
+            ' Same decode the USB path uses: RAW goes through libraw_open_buffer and comes
+            ' back as pixels, a JPEG through System.Drawing. This route used to be a second,
+            ' file-based copy of the same logic - LibRaw writing a ~31 MB TIFF that WPF read
+            ' straight back - so WiFi never got the in-memory decode that USB already had.
+            ' ReadoutMode 1 is RAW; 0 (jpg) and 2 (thumbnail) are both JPEG.
+            ' GetBuffer, not ToArray: ToArray copies the whole ~18.7 MB onto the large
+            ' object heap a second time for no reason. The backing array is longer than the
+            ' download, hence the explicit count.
+            ConvertToTiffFromBuffer(buffer.GetBuffer(), ReadoutMode = 1, nRead)
+            TL.LogMessage("WiFi timing", "decode " & swWifi.ElapsedMilliseconds & " ms")
 
         Catch ex As Exception
             ' Log what actually failed. This used to log the fixed string "error in
@@ -2090,16 +2416,16 @@ Public Class Camera
             cameraImageReady = False
             CurrentState = CameraStates.cameraIdle
             TL.LogMessage("Imageready", "False (aborted)")
-        ElseIf Not String.IsNullOrEmpty(TiffFileName) AndAlso IO.File.Exists(TiffFileName) Then
+        ElseIf HaveDecodedFrame() Then
             CurrentState = CameraStates.cameraIdle
             cameraImageReady = True
             TL.LogMessage("Imageready", "true")
         Else
-            ' Conversion failed (no TIFF): don't report ImageReady=True and then throw
-            ' FileNotFound from ImageArray - report the error state instead.
+            ' Conversion failed: don't report ImageReady=True and then throw from
+            ' ImageArray - report the error state instead.
             cameraImageReady = False
             CurrentState = CameraStates.cameraError
-            TL.LogMessage("Imageready", "False (no TIFF produced)")
+            TL.LogMessage("Imageready", "False (no image decoded)")
         End If
 
     End Sub

@@ -140,16 +140,16 @@ Public Class UsbTransport
         End If
     End Sub
 
-    ''' <summary>Fire a one-shot capture and write the image to <paramref name="dir"/>.</summary>
-    Public Shared Function Capture(dir As String, timeoutMs As Integer) As CaptureResult
+    ''' <summary>Fire a one-shot capture. The frame comes back in memory, not as a file.</summary>
+    Public Shared Function Capture(timeoutMs As Integer) As CaptureResult
         If _cam Is Nothing Then Return New CaptureResult With {.Success = False, .Error = "not connected"}
-        Return _cam.CaptureOneShot(dir, timeoutMs)
+        Return _cam.CaptureOneShot(timeoutMs)
     End Function
 
     ''' <summary>Bulb exposure of <paramref name="seconds"/> (Extended only; supports &gt;60 s).</summary>
-    Public Shared Function CaptureBulb(dir As String, seconds As Double, timeoutMs As Integer) As CaptureResult
+    Public Shared Function CaptureBulb(seconds As Double, timeoutMs As Integer) As CaptureResult
         If _cam Is Nothing Then Return New CaptureResult With {.Success = False, .Error = "not connected"}
-        Return _cam.CaptureBulb(dir, seconds, timeoutMs)
+        Return _cam.CaptureBulb(seconds, timeoutMs)
     End Function
 
     ''' <summary>Snap the requested exposure to the nearest supported shutter speed and set it. Returns the actual seconds.</summary>
