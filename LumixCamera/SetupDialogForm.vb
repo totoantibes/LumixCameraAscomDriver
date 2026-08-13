@@ -203,15 +203,20 @@ Public Class SetupDialogForm
         ' Sub-second exposure mode. Only USB Extended can honour a choice (Wi-Fi is always
         ' bulb; USB Standard can only snap), so the combo is greyed with a hint otherwise.
         ' Placed in the space the removed temp-folder field freed, beside the ASCOM logo.
-        lblSubSecond = New Label With {.Text = "Sub-second exposure", .Location = New Drawing.Point(82, 430), .AutoSize = True}
-        Me.Controls.Add(lblSubSecond)
+        ' Align the sub-second row with the TransferFormat row using the LIVE positions of the
+        ' existing dropdowns, so it lines up regardless of DPI/font auto-scaling (raw designer
+        ' pixels drift under scaling). One row-height below the last dropdown - still well above
+        ' the OK/Cancel panel. Terse items so they fit the same width; the tooltip has the rest.
+        Dim rowGap As Integer = CBReadoutMode.Top - CBShutterSpeed.Top
         cbSubSecond = New ComboBox With {
             .DropDownStyle = ComboBoxStyle.DropDownList,
-            .Location = New Drawing.Point(82, 452),
-            .Size = New Drawing.Size(Math.Max(160, rightEdge - 82), 24)}
-        cbSubSecond.Items.AddRange(New Object() {"Camera list (snap)", "Bulb (no snap)"})
+            .Location = New Drawing.Point(CBReadoutMode.Left, CBReadoutMode.Top + rowGap),
+            .Size = CBReadoutMode.Size}
+        cbSubSecond.Items.AddRange(New Object() {"Camera list", "Bulb"})
         cbSubSecond.SelectedIndex = If(String.Equals(My.Settings.SubSecondExposure, "Bulb", StringComparison.OrdinalIgnoreCase), 1, 0)
         Me.Controls.Add(cbSubSecond)
+        lblSubSecond = New Label With {.Text = "Sub-second exp.", .Location = New Drawing.Point(12, cbSubSecond.Top + 4), .AutoSize = True}
+        Me.Controls.Add(lblSubSecond)
         RefreshSubSecondEnabled()
     End Sub
 
