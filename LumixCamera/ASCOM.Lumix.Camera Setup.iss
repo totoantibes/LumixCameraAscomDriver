@@ -10,7 +10,7 @@
 ; is x64 only. See the 32-bit script for what that build can and cannot do.
 ;
 
-#define AppVer "8.1.0"
+#define AppVer "8.2.0"
 ; Paths are relative to this .iss file so the script builds on any machine.
 #define RepoRoot AddBackslash(SourcePath) + "..\"
 #define BinDir   AddBackslash(SourcePath) + "bin\x64\Release\"

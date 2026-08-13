@@ -1,6 +1,6 @@
 # Handover to the N.I.N.A. team — two ASCOM camera issues
 
-**From:** Lumix ASCOM Camera driver (`ASCOM.Lumix.Camera`, v8.1.0) — https://github.com/totoantibes/LumixCameraAscomDriver
+**From:** Lumix ASCOM Camera driver (`ASCOM.Lumix.Camera`, v8.2.0) — https://github.com/totoantibes/LumixCameraAscomDriver
 **Repo this concerns:** https://github.com/isbeorn/nina (issues previously at `bitbucket.org/Isbeorn/nina`)
 **Test rig:** Panasonic GH5S, over both Wi-Fi and USB (PTP SDK), ASCOM Platform 6.6, Windows 11.
 

@@ -137,6 +137,33 @@ transfer, which is still perfectly usable for plate-solving. In every case the c
 the RAW (or RAW+JPG) on its SD card, and your imaging software still gets a FITS frame from the
 driver.
 
+### Exposure timing: bulb vs the camera's shutter list
+
+The camera has a fixed list of discrete shutter speeds (1/4000 … 1 s), plus bulb. How a
+requested exposure is realised depends on the transport:
+
+* **Wi-Fi** always uses **bulb** - the driver opens the shutter, waits the requested time, and
+  closes it. Any duration works, but very short exposures are imprecise because the open/close
+  HTTP round-trips dominate.
+* **USB Standard** can only fire the camera's **discrete shutter speeds**, so a sub-second
+  request is **snapped to the nearest** one.
+* **USB Extended** (LUMIX Tether SDK) can do either, and exposures over 1 s always use bulb.
+
+For sub-second exposures on **USB Extended** the setup dialog offers a choice:
+
+* **Camera list** (default) - snap to the nearest real shutter speed. Accurate, but discrete:
+  0.00079 s becomes 1/1000 s.
+* **Bulb** - hold the shutter open for the exact requested time. No snapping, at the cost of
+  precision on very short exposures.
+
+The control is greyed out (with a tooltip) on Wi-Fi and USB Standard, where the transport
+already dictates the behaviour.
+
+Whichever mode is used, **`LastExposureDuration` reports the exposure actually taken** (the
+snapped 1/1000, not the requested 0.00079). Clients that drive exposure from that value - a
+flat-field wizard hunting a target ADU, say - then see a consistent exposure/brightness
+relationship even when several requested times snap to the same shutter speed.
+
 I added a "thumb" transfer mode which takes a large thumbnail of the image (1440x1080) in order to further reduce the transfer size. After exptensive tests it seems that platesolving is working well with the Thumb format too as the resolution is changed based on the THumb size and the pixelpitch is changed in the driver so to help in that process.
 
 There used to be an issue with the latest RW2 14-bit formats that DCraw did not handle. The driver uses LibRaw instead, installed next to the driver DLL.
