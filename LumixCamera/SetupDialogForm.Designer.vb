@@ -90,7 +90,7 @@ Partial Class SetupDialogForm
         Me.PictureBox1.Anchor = CType((System.Windows.Forms.AnchorStyles.Top Or System.Windows.Forms.AnchorStyles.Right), System.Windows.Forms.AnchorStyles)
         Me.PictureBox1.Cursor = System.Windows.Forms.Cursors.Hand
         Me.PictureBox1.Image = Global.ASCOM.Lumix.My.Resources.Resources.ASCOM
-        Me.PictureBox1.Location = New System.Drawing.Point(364, 287)
+        Me.PictureBox1.Location = New System.Drawing.Point(16, 333)
         Me.PictureBox1.Margin = New System.Windows.Forms.Padding(4, 4, 4, 4)
         Me.PictureBox1.Name = "PictureBox1"
         Me.PictureBox1.Size = New System.Drawing.Size(48, 56)

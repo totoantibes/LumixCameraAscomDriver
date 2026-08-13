@@ -166,35 +166,9 @@ Both install to the same place, so installing one replaces the other.
 For **USB Extended** (bulb over 60 s) also install Panasonic's **LUMIX Tether**. The
 driver uses its SDK where it is installed; nothing from Tether is redistributed here.
 
-### Building the installers
-
-```
-msbuild LumixCamera\LumixCamera.vbproj -p:Configuration=Release -p:Platform=x64
-msbuild LumixCamera\LumixCamera.vbproj -t:Rebuild -p:Configuration=Release -p:Platform=x86 -p:RegisterForComInterop=false
-ISCC "LumixCamera\ASCOM.Lumix.Camera Setup.iss"
-ISCC "LumixCamera\ASCOM.Lumix.Camera Setup32.iss"
-```
-
-The x86 build passes `RegisterForComInterop=false` because the installer registers the
-assembly itself, and registering during an x86 build fails while an x64 output is present
-(MSB3097). Both installers write to the repository root.
-
 Implements:	ASCOM Camera interface version: 2.0
  Author:		robert hasson robert_hasson@yahoo.com
  this is freeware. no support, no liability whatsoever, use at your own risk, etc...
-
-# Credits to 
- ASCOM library : https://ascom-standards.org/
-
- DCRaw: https://www.cybercom.net/~dcoffin/dcraw/
- 
- LibRaw:  https://www.libraw.org/
-
-not used anymore: 
- NDCRaw : https://github.com/AerisG222/NDCRaw
- MedallionScript: https://github.com/madelson/MedallionShell
-
-the lumix Wifi interface protocol is heavily discussed here: https://www.personal-view.com/talks/discussion/6703/control-your-gh3-from-a-web-browser-now-with-video-/p1
 
 # Adding a camera / resolution
 The known-camera and sensor-resolution tables live in **`cameras.json`**, installed next to the driver DLL. To add a body or fix a resolution, edit that file — no rebuild required:
@@ -213,6 +187,19 @@ Each `models` entry maps the camera's reported model string to a `resolutions` `
 **Upgrading does not overwrite this file**, so your additions survive. To take a newer shipped table instead, delete `cameras.json` and re-run the installer.
 
 Note this file only describes sensor **geometry**. If the driver cannot *decode* a recent body's RAW at all, that is LibRaw's table, not this one - see [LibRaw version](#libraw-version-and-replacing-it-yourself).
+
+# Credits to 
+ ASCOM library : https://ascom-standards.org/
+
+ DCRaw: https://www.cybercom.net/~dcoffin/dcraw/
+ 
+ LibRaw:  https://www.libraw.org/
+
+not used anymore: 
+ NDCRaw : https://github.com/AerisG222/NDCRaw
+ MedallionScript: https://github.com/madelson/MedallionShell
+
+the lumix Wifi interface protocol is heavily discussed here: https://www.personal-view.com/talks/discussion/6703/control-your-gh3-from-a-web-browser-now-with-video-/p1
 
 # License
 Copyright (c) 2019 < robert hasson robert_hasson@yahoo.com>
