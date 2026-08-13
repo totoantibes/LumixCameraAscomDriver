@@ -40,7 +40,6 @@ Public Class SetupDialogForm
         If CBISO.SelectedItem IsNot Nothing Then My.Settings.ISO = CBISO.SelectedItem.ToString()
         If CBReadoutMode.SelectedItem IsNot Nothing Then My.Settings.TransferFormat = CBReadoutMode.SelectedItem.ToString()
         My.Settings.IPAddress = cam.IPAddress
-        My.Settings.TempPath = TBTempPath.Text
         My.Settings.ConnectionMode = SelectedMode ' persist the chosen transport for next session
         Me.DialogResult = System.Windows.Forms.DialogResult.OK
         Me.Close()
@@ -618,12 +617,6 @@ Public Class SetupDialogForm
 
 
 
-        If My.Settings.TempPath <> "" Then
-            TBTempPath.Text = My.Settings.TempPath ' use the saved temp path
-        Else
-            TBTempPath.Text = "C:\Temp\" ' default temp path
-        End If
-
     End Sub
 
 
@@ -745,12 +738,6 @@ Public Class SetupDialogForm
 
     Private Sub CameraIPAddress_ValueMemberChanged(sender As Object, e As EventArgs) Handles CBCameraIPAddress.ValueMemberChanged
         If CBCameraIPAddress.SelectedItem IsNot Nothing Then cam.IPAddress = CBCameraIPAddress.SelectedItem.ToString()
-    End Sub
-
-    Private Sub ButtonTemp_Click(sender As Object, e As EventArgs) Handles ButtonTemp.Click
-        If FolderBrowserDialog1.ShowDialog = DialogResult.OK Then
-            TBTempPath.Text = Path.GetFullPath(FolderBrowserDialog1.SelectedPath + "\")
-        End If
     End Sub
 
     Private Sub Label8_Click(sender As Object, e As EventArgs) Handles Label8.Click
