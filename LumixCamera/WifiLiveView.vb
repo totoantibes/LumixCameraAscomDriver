@@ -139,7 +139,7 @@ Public Class WifiLiveView
         If Not _running Then Return
         _running = False
         Try
-            _cam.SendLumixMessage("cam.cgi?mode=stopstream")
+            _cam.SendLumixMessage("cam.cgi?mode=stopstream", 1500)
         Catch
         End Try
         Try

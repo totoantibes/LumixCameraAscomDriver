@@ -1663,12 +1663,16 @@ Public Class Camera
 
 
     'formats a message to be sent to the maera
-    Public Function SendLumixMessage(LumixMessage As String) As String
+    Public Function SendLumixMessage(LumixMessage As String, Optional timeoutMs As Integer = 0) As String
         ' No IP configured yet (e.g. a host connected without opening setup):
         ' don't build an invalid "http:///..." URI, which throws an *uncaught*
         ' UriFormatException. Just no-op with an empty response.
         If String.IsNullOrEmpty(IPAddress) Then Return ""
         Dim request = WebRequest.Create("http://" + IPAddress + "/" + LumixMessage)
+        ' A slow or unresponsive camera must not freeze a caller running on the UI thread -
+        ' e.g. Live View close sending "stopstream". Default WebRequest.Timeout is 100 s; an
+        ' explicit short timeout caps the wait when the caller passes one.
+        If timeoutMs > 0 Then request.Timeout = timeoutMs
         Dim myStreamReader As StreamReader
         Dim SendStatus As Integer = -1
         Dim statusCode As HttpStatusCode
