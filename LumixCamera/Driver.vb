@@ -1526,6 +1526,12 @@ Public Class Camera
     Private Const CONTENT_READY_WAIT_MS As Integer = 150
     Private Const CONTENT_READY_RETRIES As Integer = 130
 
+    ' The DLNA ContentDirectory can flap (HTTP 500 / UPnP 701 "No such object" /
+    ' an empty list) while it reindexes, or when the card holds files it cannot
+    ' serve (foreign RAW such as Sony .ARW, which cam.cgi still counts); retry the
+    ' browse a few times before giving up.
+    Private Const BROWSE_RETRIES As Integer = 8
+
     ' Same reasoning for the playmode switch that precedes the content browse: the camera
     ' rejects it while it is still committing the frame, so the loop around it is a
     ' readiness poll. 250ms x 24 keeps the ~6s ceiling the old 1000ms x 5 gave.
@@ -1574,12 +1580,10 @@ Public Class Camera
     ''' </param>
     Private Function GetPix(num As Int16, Optional ensurePlaymode As Boolean = True) As String
         If ensurePlaymode Then SendLumixMessage(PLAYMODE)
-        Dim Start As Int16 = 0
         ' Right after a capture the camera answers get_content_info with
         ' <result>err_busy</result> while it is still committing the file - longest for
         ' RAW. NumberPix() then returns "", and 'NumPix - num' threw
-        ' InvalidCastException ("" -> Double). Wait for a real count instead; give up
-        ' with "" so the caller raises a proper DriverException.
+        ' InvalidCastException ("" -> Double). Wait for a real count instead.
         Dim NumPix As String = NumberPix()
         Dim waits As Integer = 0
         Do While String.IsNullOrEmpty(NumPix) AndAlso waits < CONTENT_READY_RETRIES
@@ -1587,58 +1591,73 @@ Public Class Camera
             waits += 1
             NumPix = NumberPix()
         Loop
-        If String.IsNullOrEmpty(NumPix) Then Return ""
-        Dim total As Integer
-        If Not Integer.TryParse(NumPix, total) Then Return ""
-        Dim SoapMsg As String = SoapEnvelop(Math.Max(total - num, 0), num)
-        Dim Stream As System.IO.StreamWriter
-        Dim HTTPReq As HttpWebRequest
+        ' camCount is cam.cgi's view of the card. It is only a HINT for indexing the
+        ' DLNA browse: the DLNA ContentDirectory keeps its own, frequently different
+        ' count (RAW+JPG pairing, videos, or files it won't enumerate - foreign RAW
+        ' such as Sony .ARW that cam.cgi still counts). Indexing the browse by cam.cgi's
+        ' number overshoots the DLNA range and returns an empty list, which used to
+        ' surface downstream as a NullReferenceException. -1 means
+        ' cam.cgi never answered; the DLNA TotalMatches below then carries the browse.
+        Dim camCount As Integer = -1
+        Integer.TryParse(NumPix, camCount)
 
-        HTTPReq = WebRequest.Create("http://" + IPAddress + CDS_Control)
-        HTTPReq.ContentType = "text/xml; charset=""utf-8"""
-        HTTPReq.Method = "POST"
-        HTTPReq.Accept = "text/xml"
-        HTTPReq.Headers.Add("soapaction", "urn:schemas-upnp-org:service:ContentDirectory:1#Browse")
-
-        Stream = New StreamWriter(HTTPReq.GetRequestStream(), Encoding.UTF8)
-        Stream.Write(SoapMsg)
-        Stream.Flush()
-        Stream.Close()
-
-        Dim myStreamReader As StreamReader
-        Dim statusCode As HttpStatusCode
-        Dim ResponseText As String
-
-        Try
-            Dim myWebResponse = CType(HTTPReq.GetResponse(), HttpWebResponse)
-            myStreamReader = New StreamReader(myWebResponse.GetResponseStream())
-            If myWebResponse.StatusCode = HttpStatusCode.Accepted Or myWebResponse.StatusCode = 200 Then
-                ResponseText = myStreamReader.ReadToEnd
-                Dim answer As String = ResponseText.Replace("&amp;", "&").Replace("&apos;", "'").Replace("&quot;", """").Replace("&lt;", "<").Replace("&gt;", ">")
-                Return answer
-
-            Else
-                Return ""
+        ' Browse with a few retries: the DLNA server can transiently answer 500 /
+        ' UPnP 701 / an empty list while it reindexes. Aim at cam.cgi's count first
+        ' (correct when the two services agree, which is the common case), and if that
+        ' comes back short, re-aim off the DLNA server's OWN TotalMatches.
+        For attempt As Integer = 1 To BROWSE_RETRIES
+            Dim body As String = ""
+            If camCount >= 0 Then body = DoBrowse(Math.Max(camCount - num, 0), num)
+            Dim returned As Integer = ParseIntTag(body, "NumberReturned")
+            Dim dlnaTotal As Integer = ParseIntTag(body, "TotalMatches")
+            If returned < num AndAlso dlnaTotal > 0 AndAlso dlnaTotal <> camCount Then
+                TL.LogMessage("GetPix", "cam.cgi count " & camCount & " <> DLNA TotalMatches " & dlnaTotal & " - re-aiming browse")
+                body = DoBrowse(Math.Max(dlnaTotal - num, 0), num)
+                returned = ParseIntTag(body, "NumberReturned")
             End If
-        Catch e As WebException
-            If (e.Status = WebExceptionStatus.ProtocolError) Then
-                Dim response As WebResponse = e.Response
-                Using (response)
-                    Dim httpResponse As HttpWebResponse = CType(response, HttpWebResponse)
-                    statusCode = httpResponse.StatusCode
-                    Try
-                        myStreamReader = New StreamReader(response.GetResponseStream())
-                        Using (myStreamReader)
-                            ResponseText = myStreamReader.ReadToEnd & "Status Description = " & httpResponse.StatusDescription ' HttpWebResponse.StatusDescription
-                            Return ""
-                        End Using
-                    Catch ex As Exception
-                        'TL.LogMessage("Message" + LumixMessage + " Sent Failed", LumixMessage + " failed")
-                    End Try
+            If returned >= num AndAlso Not String.IsNullOrEmpty(body) Then Return body
+            TL.LogMessage("GetPix", "browse attempt " & attempt & "/" & BROWSE_RETRIES & " returned " & returned & " item(s) (camCount=" & camCount & ")")
+            Thread.Sleep(CONTENT_READY_WAIT_MS)
+        Next
+        Return "" ' caller raises a clean DriverException on empty
+    End Function
+
+    ' One DLNA ContentDirectory Browse. Returns the entity-decoded SOAP body, or "" on
+    ' any transport/HTTP error - including the 500 / UPnP-701 the camera throws while
+    ' reindexing - so the caller can retry or re-aim rather than crash.
+    Private Function DoBrowse(start As Integer, count As Integer) As String
+        Try
+            Dim HTTPReq As HttpWebRequest = WebRequest.Create("http://" + IPAddress + CDS_Control)
+            HTTPReq.ContentType = "text/xml; charset=""utf-8"""
+            HTTPReq.Method = "POST"
+            HTTPReq.Accept = "text/xml"
+            HTTPReq.Headers.Add("soapaction", "urn:schemas-upnp-org:service:ContentDirectory:1#Browse")
+            Using rs As New StreamWriter(HTTPReq.GetRequestStream(), Encoding.UTF8)
+                rs.Write(SoapEnvelop(start, count))
+            End Using
+            Dim resp As HttpWebResponse = CType(HTTPReq.GetResponse(), HttpWebResponse)
+            If resp.StatusCode = HttpStatusCode.Accepted OrElse resp.StatusCode = HttpStatusCode.OK Then
+                Using sr As New StreamReader(resp.GetResponseStream())
+                    Dim text As String = sr.ReadToEnd()
+                    Return text.Replace("&amp;", "&").Replace("&apos;", "'").Replace("&quot;", """").Replace("&lt;", "<").Replace("&gt;", ">")
                 End Using
             End If
             Return ""
+        Catch e As WebException
+            ' ProtocolError carries the camera's 500/701 body; we only need to know it
+            ' failed so the caller can retry.
+            TL.LogMessage("DoBrowse", "browse " & start & "/" & count & " failed: " & e.Message)
+            Return ""
         End Try
+    End Function
+
+    ' Pull an integer SOAP-envelope tag (NumberReturned / TotalMatches) out of a browse
+    ' response. -1 when absent so callers can distinguish "0 items" from "no answer".
+    Private Shared Function ParseIntTag(xml As String, tag As String) As Integer
+        If String.IsNullOrEmpty(xml) Then Return -1
+        Dim m = System.Text.RegularExpressions.Regex.Match(xml, "<" & tag & ">(\d+)</" & tag & ">")
+        If m.Success Then Return CInt(m.Groups(1).Value)
+        Return -1
     End Function
 
 
@@ -2200,8 +2219,26 @@ Public Class Camera
                 Throw New ASCOM.DriverException("The camera returned an empty image-list response")
             End If
 
-            Dim items As IEnumerable(Of XElement) =
-        DirectCast(DirectCast(DirectCast(DirectCast(DirectCast(XPictures.FirstNode, System.[Xml].Linq.XContainer).FirstNode, System.[Xml].Linq.XContainer).FirstNode, System.[Xml].Linq.XContainer).FirstNode, System.[Xml].Linq.XContainer).FirstNode, System.[Xml].Linq.XContainer).Elements
+            ' The DIDL-Lite that carries the items sits five nodes deep
+            ' (Envelope>Body>BrowseResponse>Result>DIDL-Lite). If the browse came back
+            ' well-formed but item-less - the camera reindexing, or an index past the
+            ' DLNA range slipping through - one of those FirstNodes is Nothing and this
+            ' chain threw a bare NullReferenceException that told nobody anything. Walk it
+            ' defensively and raise a diagnosable error instead.
+            Dim items As IEnumerable(Of XElement) = Nothing
+            Try
+                Dim node As System.[Xml].Linq.XNode = XPictures.FirstNode
+                For depth As Integer = 1 To 4
+                    node = DirectCast(node, System.[Xml].Linq.XContainer).FirstNode
+                Next
+                items = DirectCast(node, System.[Xml].Linq.XContainer).Elements
+            Catch
+                items = Nothing
+            End Try
+            If items Is Nothing Then
+                TL.LogMessage("ReadImageFromCamera", "browse response had no item list - DLNA content empty or reindexing")
+                Throw New ASCOM.DriverException("The camera returned no browsable image (DLNA content list empty - the card may hold files the camera cannot serve, e.g. foreign RAW such as Sony .ARW, or it is still reindexing). Remove foreign/unreadable files or power-cycle the camera, then retry.")
+            End If
 
             For Each it In items
                 If it.HasAttributes Then
@@ -2216,7 +2253,7 @@ Public Class Camera
 
 
             If Images = "" Then
-                Throw New ASCOM.DriverException
+                Throw New ASCOM.DriverException("No " & LookupImgtag & " resource in the camera's newest content item (wrong readout mode for what is on the card, or that file type is not present).")
             End If
 
             ' No PLAYMODE here: the retry loop above set it and the content browse that
